@@ -1,4 +1,4 @@
-// 本地 HTTP 事件服务 — 接收 Claude Hook / OpenCode Plugin 的事件回调
+// Local HTTP event server - receives event callbacks from Claude hooks / the OpenCode plugin
 package io.github.q110.aiterminaltools.monitor
 
 import com.intellij.openapi.Disposable
@@ -21,7 +21,7 @@ class AiTurnEventServer(
     private var server: HttpServer? = null
     private var port: Int = -1
 
-    /** 确保 HTTP 服务已启动，返回监听端口 */
+    /** Ensure the HTTP service is running and return the listening port. */
     @Synchronized
     fun ensureStarted(): Int {
         if (server != null) return port
@@ -46,13 +46,13 @@ class AiTurnEventServer(
 
     private fun handleEvent(exchange: HttpExchange) {
         try {
-            // 只接受 POST
+            // Accept POST only.
             if (exchange.requestMethod != "POST") {
                 exchange.sendResponseHeaders(405, -1)
                 return
             }
 
-            // 检查 Content-Length 上限（2 MB）
+            // Enforce the Content-Length upper bound (2 MB).
             val contentLength = exchange.requestHeaders.getFirst("Content-Length")?.toLongOrNull() ?: 0
             if (contentLength > MAX_BODY_SIZE) {
                 log.warn("Request body too large: $contentLength bytes")
@@ -92,8 +92,8 @@ class AiTurnEventServer(
     }
 
     /**
-     * 解析 JSON body 为 AiTurnEvent。
-     * 使用简单的手动 JSON 解析，避免引入 Gson/Jackson 等第三方依赖。
+     * Parse the JSON body into an `AiTurnEvent`.
+     * Uses a simple manual JSON parser to avoid adding third-party dependencies such as Gson/Jackson.
      */
     private fun parseEvent(body: String, headerToken: String?): AiTurnEvent? {
         val source = extractJsonString(body, "source") ?: return null
@@ -129,9 +129,9 @@ class AiTurnEventServer(
         )
     }
 
-    /** 从 JSON 字符串中提取指定 key 的 string 值（简单实现） */
+    /** Extract a string value for the given key from a JSON string (simple implementation). */
     private fun extractJsonString(json: String, key: String): String? {
-        // 匹配 "key": "value" 或 "key":"value"
+        // Match `"key": "value"` or `"key":"value"`.
         val pattern = Regex(""""${Regex.escape(key)}"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"""")
         return pattern.find(json)?.groupValues?.get(1)
             ?.replace("\\\"", "\"")
@@ -142,9 +142,9 @@ class AiTurnEventServer(
             ?.replace("\\t", "\t")
     }
 
-    /** 从 JSON 字符串中提取指定 key 的 string 数组值 */
+    /** Extract a string array value for the given key from a JSON string. */
     private fun extractJsonStringArray(json: String, key: String): List<String> {
-        // 匹配 "key": [...] 或 "key":[...]
+        // Match `"key": [...]` or `"key":[...]`.
         val arrayPattern = Regex(""""${Regex.escape(key)}"\s*:\s*\[([^\]]*)]""")
         val arrayContent = arrayPattern.find(json)?.groupValues?.get(1) ?: return emptyList()
 

@@ -1,4 +1,4 @@
-// 独立 JFrame 窗口展示 AI Turn Diff，保留原生窗口按钮并跟随 IDE 主题。
+// Standalone JFrame window for AI Turn Diff, preserving native window buttons and following the IDE theme.
 package io.github.q110.aiterminaltools.monitor
 
 import com.intellij.diff.DiffManager
@@ -27,10 +27,10 @@ import javax.swing.JFrame
 import javax.swing.JPanel
 
 /**
- * 在独立 [JFrame] 中展示本轮 AI 修改。
+ * Show the current AI changes in a standalone [JFrame].
  *
- * 使用 [JFrame] 是为了保留 Windows 原生最大化/最小化按钮；内容仍由 IntelliJ
- * Diff API 渲染。顶部栏显示本轮修改文件数和文件选择下拉框。
+ * [JFrame] is used to preserve the native Windows maximize/minimize buttons; the content is still
+ * rendered by the IntelliJ Diff API. The top bar shows the number of changed files and a file picker.
  */
 class AiTurnDiffDialog(
     project: Project,
@@ -42,7 +42,7 @@ class AiTurnDiffDialog(
 
     private val parentFrame = WindowManager.getInstance().getFrame(project)
     private val frame = JFrame().apply {
-        title = "AI Terminal 本轮修改 - ${requests.size} 个文件"
+        title = "AI Terminal Changes - ${requests.size} files"
         iconImage = parentFrame?.iconImage
         isResizable = true
         defaultCloseOperation = JFrame.DISPOSE_ON_CLOSE
@@ -59,7 +59,7 @@ class AiTurnDiffDialog(
     private val diffPanel = DiffManager.getInstance().createRequestPanel(project, disposable, frame)
     private val fileComboBox = ComboBox(requests.map { it.title }.toTypedArray()).apply {
         isEnabled = requests.size > 1
-        toolTipText = "选择本轮修改的文件"
+        toolTipText = "Select a file changed in this turn"
     }
 
     private var currentIndex = 0
@@ -94,7 +94,7 @@ class AiTurnDiffDialog(
             background = UIUtil.getPanelBackground()
             border = JBUI.Borders.empty(8, 10)
         }
-        val countLabel = JBLabel("本轮修改 ${requests.size} 个文件").apply {
+        val countLabel = JBLabel("This turn changed ${requests.size} file(s)").apply {
             foreground = UIUtil.getLabelForeground()
             border = JBUI.Borders.emptyRight(10)
         }
@@ -116,7 +116,7 @@ class AiTurnDiffDialog(
         return header
     }
 
-    // ---- Windows 标题栏主题 ----
+    // ---- Windows title bar theme ----
 
     private fun applyTitleBarTheme(window: Window) {
         if (!SystemInfo.isWin10OrNewer) return
@@ -138,11 +138,11 @@ class AiTurnDiffDialog(
                 )
             }
         } catch (_: Throwable) {
-            // 非 Windows 或 JNA/DWM 不可用时使用系统默认标题栏。
+            // Use the system default title bar when not on Windows or when JNA/DWM is unavailable.
         }
     }
 
-    /** JNA 映射 dwmapi.dll 的 DwmSetWindowAttribute。 */
+    /** JNA mapping for `dwmapi.dll`'s `DwmSetWindowAttribute`. */
     private interface DwmApi : Library {
         companion object {
             val INSTANCE: DwmApi = Native.load("dwmapi", DwmApi::class.java)

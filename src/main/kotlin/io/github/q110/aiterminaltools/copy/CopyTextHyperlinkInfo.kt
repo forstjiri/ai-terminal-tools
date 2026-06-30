@@ -1,4 +1,4 @@
-// 点击复制链接处理器 — 点击后将匹配文本复制到剪贴板并显示 "已复制" 提示
+// Click-to-copy hyperlink handler - copies the matched text to the clipboard and shows a "Copied" hint
 package io.github.q110.aiterminaltools.copy
 
 import com.intellij.execution.filters.HyperlinkInfoBase
@@ -20,7 +20,7 @@ internal class CopyTextHyperlinkInfo(
     private val project: Project,
     private val text: String
 ) : HyperlinkInfoBase() {
-    /** 复制文本并在链接上方显示持续 700ms 的 Balloon 提示 */
+    /** Copy the text and show a balloon hint above the link for 700ms. */
     override fun navigate(project: Project, hyperlinkLocationPoint: RelativePoint?) {
         CopyPasteManager.copyTextToClipboard(text)
         if (hyperlinkLocationPoint == null) {
@@ -32,7 +32,7 @@ internal class CopyTextHyperlinkInfo(
         content.minimumSize = Dimension(64, 28)
         content.maximumSize = Dimension(64, 28)
         content.border = JBUI.Borders.empty()
-        content.add(JBLabel("已复制", SwingConstants.CENTER), BorderLayout.CENTER)
+        content.add(JBLabel("Copied", SwingConstants.CENTER), BorderLayout.CENTER)
 
         val balloon = JBPopupFactory.getInstance()
             .createBalloonBuilder(content)

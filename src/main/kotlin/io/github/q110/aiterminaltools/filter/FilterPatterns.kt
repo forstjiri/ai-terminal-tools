@@ -1,31 +1,33 @@
-// 控制台文本解析用正则表达式常量
+// Regex constants for console text parsing
 package io.github.q110.aiterminaltools.filter
 
 internal object FilterPatterns {
-    // 匹配文件引用，支持行号和行范围：Main.java:10-20
+    // Match file references, including line numbers and ranges: Main.java:10-20.
+    // Character classes are Unicode-aware (\p{L}) so names containing letters such as
+    // ě š č ř ž ý á í é ů ť ď ň are recognized in both file refs and click-to-copy text.
     fun fileRefPattern(extensions: Set<String>): Regex {
         val extensionPattern = extensions.joinToString("|") { Regex.escape(it) }
-        val fileNamePattern = """(?:[A-Za-z_$][A-Za-z0-9_.$-]*\.(?:$extensionPattern)|\.(?:$extensionPattern))"""
-        val pathPrefixPattern = """(?:(?:[A-Za-z]:)?[\\/]|\.{1,2}[\\/])?(?:[A-Za-z0-9_.$-]+[\\/])+"""
+        val fileNamePattern = """(?:[\p{L}_$][\p{L}0-9_.$-]*\.(?:$extensionPattern)|\.(?:$extensionPattern))"""
+        val pathPrefixPattern = """(?:(?:[A-Za-z]:)?[\\/]|\.{1,2}[\\/])?(?:[\p{L}0-9_.$-]+[\\/])+"""
         val pathPattern = """$pathPrefixPattern$fileNamePattern"""
         return Regex(
-            """(?<![\\/A-Za-z0-9_.$-])($pathPattern|$fileNamePattern)(?::(\d+)(?:-(\d+))?)?(?![\d\w.$-])""",
+            """(?<![\\\p{L}0-9_.$/-])($pathPattern|$fileNamePattern)(?::(\d+)(?:-(\d+))?)?(?![\p{L}0-9_.$-])""",
             RegexOption.IGNORE_CASE
         )
     }
 
-    // 匹配 AI 终端 @路径引用：@src/main/java/A.java:10
-    val atPathRefPattern = Regex("""(?<![\w$.-])@([A-Za-z0-9_.$-]+(?:[\\/][A-Za-z0-9_.$-]+)*)(?::(\d+)(?:-(\d+))?)?(?![\d\w.$-])""")
-    // 点击复制模式列表，按优先级从高到低排列
+    // Match AI terminal @path references: @src/main/java/A.java:10
+    val atPathRefPattern = Regex("""(?<![\p{L}0-9_$.-])@([\p{L}0-9_.$-]+(?:[\\/][\p{L}0-9_.$-]+)*)(?::(\d+)(?:-(\d+))?)?(?![\p{L}0-9_.$-])""")
+    // Click-to-copy patterns, ordered from highest to lowest priority
     val copyPatterns = listOf(
-        Regex("""\{\{[^{}\r\n]*[A-Za-z_$][^{}\r\n]*}}"""),
+        Regex("""\{\{[^{}\r\n]*[\p{L}_$][^{}\r\n]*}}"""),
         Regex("""\[\[[^\r\n|]+]]"""),
         Regex("""\[[^\r\n|]*"[^"\r\n]+"[^\r\n|]*]"""),
-        Regex("""(?<![\w$])\$?[A-Za-z_$][A-Za-z0-9_$]*\([^()\r\n]*\)"""),
-        Regex("""(?<![\w$])/?[A-Za-z0-9_$.-]+(?:/[A-Za-z0-9_$?=&.-]+)+(?![\w$])"""),
-        Regex("""(?<![\w$])\$?[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*|\[[A-Za-z_$][A-Za-z0-9_$.]*])+(?![\w$])"""),
-        Regex("""(?<![\w$])(?:null|NaN|true|false)(?![\w$])"""),
-        Regex("""(?<![\w$])\$?[A-Za-z_$][A-Za-z0-9_$-]*(?![\w$])"""),
-        Regex("""(?<![\w.])\d+(?![\w.])""")
+        Regex("""(?<![\p{L}0-9_$])\$?[\p{L}_$][\p{L}0-9_$]*\([^()\r\n]*\)"""),
+        Regex("""(?<![\p{L}0-9_$])/?[\p{L}0-9_$.-]+(?:/[\p{L}0-9_$?=&.-]+)+(?![\p{L}0-9_$])"""),
+        Regex("""(?<![\p{L}0-9_$])\$?[\p{L}_$][\p{L}0-9_$]*(?:\.[\p{L}_$][\p{L}0-9_$]*|\[[\p{L}_$][\p{L}0-9_$.]*])+(?![\p{L}0-9_$])"""),
+        Regex("""(?<![\p{L}0-9_$])(?:null|NaN|true|false)(?![\p{L}0-9_$])"""),
+        Regex("""(?<![\p{L}0-9_$])\$?[\p{L}_$][\p{L}0-9_$-]*(?![\p{L}0-9_$])"""),
+        Regex("""(?<![\p{L}_0-9.])\d+(?![\p{L}_0-9.])""")
     )
 }

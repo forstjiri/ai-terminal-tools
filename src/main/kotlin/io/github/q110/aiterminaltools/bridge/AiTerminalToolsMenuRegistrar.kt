@@ -1,4 +1,4 @@
-// 启动后动态注册右键菜单项 — 确保排在菜单最前面，不受加载顺序影响
+// Dynamically registers context menu items after startup so they stay at the front and are not affected by load order
 package io.github.q110.aiterminaltools.bridge
 
 import com.intellij.openapi.actionSystem.ActionManager
@@ -10,7 +10,7 @@ import com.intellij.openapi.components.service
 import io.github.q110.aiterminaltools.console.AiConsoleErrorInlayService
 
 class AiTerminalToolsMenuRegistrar : StartupActivity, DumbAware {
-    /** 启动时初始化运行时服务，并把动态动作插入 IDE 菜单/工具栏 */
+    /** Initialize runtime services at startup and insert dynamic actions into the IDE menus/toolbars. */
     override fun runActivity(project: com.intellij.openapi.project.Project) {
         project.service<AiConsoleErrorInlayService>().initialize()
         project.service<AiTerminalDropService>().initialize()
@@ -28,7 +28,7 @@ class AiTerminalToolsMenuRegistrar : StartupActivity, DumbAware {
         registerToolbarAction(actionManager, "AiTerminalTools.StartClaudeCode")
     }
 
-    /** 以 Constraints.FIRST 插入菜单组最前面 */
+    /** Insert the menu item at the front of the group using `Constraints.FIRST`. */
     private fun registerMenuFirst(actionManager: ActionManager, menuId: String, actionId: String) {
         val group = actionManager.getAction(menuId) as? DefaultActionGroup ?: return
         val action = actionManager.getAction(actionId) ?: return
@@ -45,7 +45,7 @@ class AiTerminalToolsMenuRegistrar : StartupActivity, DumbAware {
         group.addAction(action, Constraints.LAST)
     }
 
-    /** 兼容新版 MainToolbarRight 和旧版 MainToolBar */
+    /** Support both the new `MainToolbarRight` and the old `MainToolBar`. */
     private fun toolbarGroup(actionManager: ActionManager): DefaultActionGroup? {
         return actionManager.getAction("MainToolbarRight") as? DefaultActionGroup
             ?: actionManager.getAction("MainToolBar") as? DefaultActionGroup

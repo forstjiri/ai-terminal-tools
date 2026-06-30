@@ -1,4 +1,4 @@
-// Diff 展示器 — 使用 IntelliJ 原生 Diff API 弹出多文件 Diff 窗口
+// Diff presenter - opens a multi-file Diff window using the IntelliJ native Diff API
 package io.github.q110.aiterminaltools.monitor
 
 import com.intellij.diff.DiffContentFactory
@@ -19,14 +19,14 @@ class AiTurnDiffPresenter(
 ) {
     private val log = Logger.getInstance(AiTurnDiffPresenter::class.java)
 
-    /** 最近一次完成的 turn 状态，用于 "Show Last AI Turn Diff" */
+    /** The most recent completed turn state, used by "Show Last AI Turn Diff". */
     @Volatile
     var lastTurn: AiTurnState? = null
         private set
 
     /**
-     * 展示指定 turn 中所有被修改文件的 Diff。
-     * 在 EDT 中使用 IntelliJ DiffManager 弹出多文件 Diff 窗口。
+     * Show the Diff for all modified files in the given turn.
+     * This opens a multi-file Diff window on the EDT via IntelliJ DiffManager.
      */
     fun showDiff(turn: AiTurnState) {
         if (turn.changedFiles.isEmpty()) {
@@ -46,16 +46,16 @@ class AiTurnDiffPresenter(
                 AiTurnDiffDialog(project, requests).show()
             } catch (exception: Throwable) {
                 log.error("Failed to show diff", exception)
-                notify("打开 Diff 窗口失败：${exception.message}", NotificationType.WARNING)
+                notify("Failed to open the Diff window: ${exception.message}", NotificationType.WARNING)
             }
         }
     }
 
-    /** 重新打开上次 Diff */
+    /** Reopen the last Diff. */
     fun showLastDiff() {
         val turn = lastTurn
         if (turn == null) {
-            notify("没有可显示的 AI Turn Diff 记录。", NotificationType.INFORMATION)
+            notify("No AI Turn Diff records are available.", NotificationType.INFORMATION)
             return
         }
         showDiff(turn)
@@ -72,7 +72,7 @@ class AiTurnDiffPresenter(
                 return@mapNotNull null
             }
 
-            // 跳过二进制文件
+            // Skip binary files.
             if (oldSnapshot is FileSnapshot.Binary) {
                 skippedBinaryCount++
                 return@mapNotNull null
@@ -85,7 +85,7 @@ class AiTurnDiffPresenter(
                         return@mapNotNull null
                     }
                 } catch (_: Throwable) {
-                    // 读取失败则继续尝试
+                    // If reading fails, keep trying.
                 }
             }
 
@@ -107,7 +107,7 @@ class AiTurnDiffPresenter(
                     }
                 }
                 is FileSnapshot.Binary -> {
-                    // 已被跳过，不会到这里
+                    // Already skipped, so this branch should not be reached.
                     return@mapNotNull null
                 }
             }
@@ -132,7 +132,7 @@ class AiTurnDiffPresenter(
                 ?: path.toString()
 
             SimpleDiffRequest(
-                "AI Terminal 修改：$displayPath",
+                "AI Terminal Changes: $displayPath",
                 oldContent,
                 newContent,
                 "Before AI turn",
@@ -141,7 +141,7 @@ class AiTurnDiffPresenter(
         }
 
         if (skippedBinaryCount > 0) {
-            notify("已跳过 $skippedBinaryCount 个二进制文件。", NotificationType.INFORMATION)
+            notify("Skipped $skippedBinaryCount binary file(s).", NotificationType.INFORMATION)
         }
 
         return requests

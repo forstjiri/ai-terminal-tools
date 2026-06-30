@@ -1,4 +1,4 @@
-// "发送选区到 AI Terminal" Action — 将编辑器选中代码通过桥接发送到当前激活的 AI 终端输入区
+// "Send Selection to AI Terminal" action - sends the selected editor code through the bridge to the currently active AI terminal input area
 package io.github.q110.aiterminaltools.bridge
 
 import com.intellij.notification.NotificationType
@@ -23,19 +23,19 @@ class SendSelectionToAiTerminalAction : AnAction(AllIcons.Debugger.Console) {
         event.presentation.isEnabled = project != null && hasSelection
     }
 
-    /** 构造 payload 并调用桥接服务 */
+    /** Build the payload and call the bridge service. */
     override fun actionPerformed(event: AnActionEvent) {
         val project = event.project ?: return
         val editor = event.getData(CommonDataKeys.EDITOR)
         if (editor == null) {
-            AiTerminalBridgeService.notify(project, "没有找到当前编辑器。", NotificationType.WARNING)
+            AiTerminalBridgeService.notify(project, "Could not find the current editor.", NotificationType.WARNING)
             return
         }
 
         val selectionModel = editor.selectionModel
         val selectedText = selectionModel.selectedText
         if (selectedText.isNullOrEmpty()) {
-            AiTerminalBridgeService.notify(project, "请先选中要发送给 AI Terminal 的代码。", NotificationType.WARNING)
+            AiTerminalBridgeService.notify(project, "Please select the code you want to send to AI Terminal first.", NotificationType.WARNING)
             return
         }
 
@@ -58,7 +58,7 @@ class SendSelectionToAiTerminalAction : AnAction(AllIcons.Debugger.Console) {
 
         when (val result = AiTerminalBridgeService.getInstance(project).sendDirectPaste(payload, event.dataContext)) {
             is AiTerminalBridgeService.BridgeResult.Success -> {
-                AiTerminalBridgeService.notify(project, "已发送到 AI Terminal", NotificationType.INFORMATION)
+                AiTerminalBridgeService.notify(project, "Sent to AI Terminal", NotificationType.INFORMATION)
             }
             is AiTerminalBridgeService.BridgeResult.Scheduled -> {
             }

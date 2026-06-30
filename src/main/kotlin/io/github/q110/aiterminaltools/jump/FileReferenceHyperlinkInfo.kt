@@ -1,4 +1,4 @@
-// 文件跳转链接处理器 — 点击后自动选择最佳文件并跳转到指定行
+// File jump hyperlink handler - automatically chooses the best file and jumps to the requested line when clicked
 package io.github.q110.aiterminaltools.jump
 
 import com.intellij.execution.filters.HyperlinkInfo
@@ -14,19 +14,19 @@ import io.github.q110.aiterminaltools.filter.pathMatches
 
 internal class FileReferenceHyperlinkInfo(
     private val project: Project,
-    /** 同名文件候选列表（按显示路径排序） */
+    /** Candidate files with the same name (sorted by display path). */
     private val files: List<VirtualFile>,
     private val fileName: String,
-    /** 当前行中包含的路径上下文 */
+    /** Path context contained in the current line. */
     private val requestedPath: String?,
     private val hasLineNumber: Boolean,
     private val lineNumber: Int,
-    /** 可选行范围终点 */
+    /** Optional end line for a range. */
     private val endLineNumber: Int?,
-    /** 最近路径缓存（按文件名索引） */
+    /** Recent path cache indexed by file name. */
     private val recentFilePathsByName: Map<String, String>
 ) : HyperlinkInfo {
-    /** 打开文件、选中行范围、滚动居中 */
+    /** Open the file, select the line range, and scroll it to center. */
     override fun navigate(project: Project) {
         val target = chooseBestFile() ?: chooseFile()
         if (target != null) {
@@ -57,22 +57,22 @@ internal class FileReferenceHyperlinkInfo(
         }
     }
 
-    /** 从候选文件中智能选择最佳文件 */
+    /** Smartly choose the best file from the candidates. */
     private fun chooseBestFile(): VirtualFile? {
         if (files.size == 1) return files.first()
 
-        // 优先按路径后缀精确匹配
+        // Prefer an exact match by path suffix.
         if (requestedPath != null) {
             findByPathSuffix(requestedPath)?.let { return it }
         }
 
-        // 其次匹配最近出现过的路径
+        // Next try the most recently seen path.
         val recentPath = recentFilePathsByName[fileName]
         if (recentPath != null) {
             findByPathSuffix(recentPath)?.let { return it }
         }
 
-        // 最后按加权打分选择
+        // Finally, choose by weighted scoring.
         val scoredFiles = files.groupBy { scoreFile(it) }
         val bestScore = scoredFiles.keys.maxOrNull() ?: return null
         val bestFiles = scoredFiles[bestScore].orEmpty()
@@ -85,7 +85,7 @@ internal class FileReferenceHyperlinkInfo(
         }
     }
 
-    /** 利用 IntelliJ 项目索引打分：源码根 +100, 测试根 -60, 排除目录 -200, 库文件 -100, 精确文件名后缀 +10 */
+    /** Score with IntelliJ project indexes: source root +100, test root -60, excluded dir -200, library file -100, exact filename suffix +10. */
     private fun scoreFile(file: VirtualFile): Int {
         val fileIndex = ProjectFileIndex.getInstance(project)
         var score = 0
@@ -98,7 +98,7 @@ internal class FileReferenceHyperlinkInfo(
         return score
     }
 
-    /** 自动选择失败时弹出文件选择对话框 */
+    /** Show the file selection dialog if automatic selection fails. */
     private fun chooseFile(): VirtualFile? {
         val dialog = FileChoiceDialog(project, files)
         return if (dialog.showAndGet()) dialog.selectedFile else null

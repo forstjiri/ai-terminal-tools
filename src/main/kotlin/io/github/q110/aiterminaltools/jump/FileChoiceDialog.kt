@@ -1,4 +1,4 @@
-// 同名文件选择弹窗 — 当多个文件匹配时让用户手动选择
+// Same-name file selection dialog - lets the user choose manually when multiple files match
 package io.github.q110.aiterminaltools.jump
 
 import com.intellij.openapi.project.Project
@@ -20,15 +20,15 @@ internal class FileChoiceDialog(
     private val project: Project,
     private val files: List<VirtualFile>
 ) : DialogWrapper(project) {
-    // 列表里显示相对/友好的路径，方便用户区分同名文件。
+    // Show relative/friendly paths in the list so users can distinguish same-named files.
     private val list = JBList(files.map { displayPath(project, it) })
 
-    // 当前选中的条目对应的原始文件；如果没有有效选择则返回 null。
+    // The raw file for the currently selected entry; returns null if there is no valid selection.
     val selectedFile: VirtualFile?
         get() = files.getOrNull(list.selectedIndex)
 
     init {
-        title = "选择文件"
+        title = "Select File"
         list.selectionMode = ListSelectionModel.SINGLE_SELECTION
         list.selectedIndex = 0
         init()
@@ -36,13 +36,13 @@ internal class FileChoiceDialog(
 
     override fun createCenterPanel(): JComponent {
         val panel = JPanel(BorderLayout())
-        panel.add(JLabel("发现多个同名文件，请选择要跳转的文件。"), BorderLayout.NORTH)
+        panel.add(JLabel("Multiple files with the same name were found. Select the file you want to jump to."), BorderLayout.NORTH)
         panel.add(JBScrollPane(list), BorderLayout.CENTER)
         panel.preferredSize = dialogSize(project)
         return panel
     }
 
-    // 弹窗按当前窗口尺寸优先，其次退回到屏幕尺寸，避免过大或过小。
+    // Prefer the current window size, then fall back to the screen size, to avoid dialogs that are too large or too small.
     private fun dialogSize(project: Project): Dimension {
         val windowSize = WindowManager.getInstance().getFrame(project)?.size
             ?: Toolkit.getDefaultToolkit().screenSize

@@ -1,4 +1,4 @@
-// "启动 Claude Code" 动作 — 创建受插件监控的 Claude Code 终端标签页
+// "Start Claude Code" action - creates a Claude Code terminal tab monitored by the plugin
 package io.github.q110.aiterminaltools.bridge
 
 import com.intellij.notification.NotificationType
@@ -7,7 +7,7 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 
 class StartClaudeCodeAction : AnAction() {
-    /** 工具栏动作只依赖项目上下文，允许在 EDT 更新显示状态 */
+    /** This toolbar action only depends on project context, so the enabled state can be updated on the EDT. */
     override fun getActionUpdateThread(): ActionUpdateThread {
         return ActionUpdateThread.EDT
     }
@@ -18,10 +18,10 @@ class StartClaudeCodeAction : AnAction() {
 
     override fun actionPerformed(event: AnActionEvent) {
         val project = event.project ?: return
-        // 具体终端创建、环境变量注入和 Hook 安装都由桥接服务统一处理。
+        // Terminal creation, environment injection, and hook setup are handled by the bridge service.
         when (val result = AiTerminalBridgeService.getInstance(project).startClaudeCodeTerminal()) {
             is AiTerminalBridgeService.BridgeResult.Success -> {
-                AiTerminalBridgeService.notify(project, "已启动 Claude Code", NotificationType.INFORMATION)
+                AiTerminalBridgeService.notify(project, "Started Claude Code", NotificationType.INFORMATION)
             }
             is AiTerminalBridgeService.BridgeResult.Scheduled -> {
             }

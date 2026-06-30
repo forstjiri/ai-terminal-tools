@@ -1,4 +1,4 @@
-// 文件夹跳转链接处理器 — 点击后在 Project View 中定位并展开文件夹
+// Folder jump hyperlink handler - selects and expands the folder in Project View when clicked
 package io.github.q110.aiterminaltools.jump
 
 import com.intellij.execution.filters.HyperlinkInfo
@@ -11,7 +11,7 @@ internal class FolderReferenceHyperlinkInfo(
     private val folder: VirtualFile
 ) : HyperlinkInfo {
     override fun navigate(project: Project) {
-        // 这里使用构造参数里的 project，确保跳转始终发生在创建链接时对应的项目里。
+        // Use the constructor project so navigation always happens in the project that created the link.
         ProjectView.getInstance(this.project).select(null, folder, true)
     }
 }

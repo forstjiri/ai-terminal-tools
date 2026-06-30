@@ -1,4 +1,4 @@
-// 控制台错误 Inlay 服务 — 在错误首行旁显示发送到 AI Terminal 的图标
+// Console error inlay service - shows a send-to-AI Terminal icon next to the error headline
 package io.github.q110.aiterminaltools.console
 
 import com.intellij.ide.DataManager
@@ -43,7 +43,7 @@ class AiConsoleErrorInlayService(
     private var previousToolTipText: String? = null
 
     init {
-        // 控制台输出持续追加，文档变化时延迟重扫以合并同一批输出。
+        // Console output keeps appending, so rescan changes with a delay to coalesce the same batch of output.
         editorFactory.eventMulticaster.addDocumentListener(object : DocumentListener {
             override fun documentChanged(event: DocumentEvent) {
                 scheduleRescan(event.document)
@@ -67,7 +67,7 @@ class AiConsoleErrorInlayService(
         }, this)
     }
 
-    /** 项目启动后补扫已经存在的控制台编辑器 */
+    /** Rescan existing console editors after project startup. */
     fun initialize() {
         editorFactory.allEditors
             .filter { isProjectConsoleEditor(it) }
@@ -86,7 +86,7 @@ class AiConsoleErrorInlayService(
         }
     }
 
-    /** 根据解析出的错误块增删 inlay，避免同一行重复创建图标 */
+    /** Add or remove inlays based on parsed error blocks to avoid duplicate icons on the same line. */
     private fun rescan(document: Document) {
         val editors = projectConsoleEditors(document)
         if (editors.isEmpty()) {
@@ -133,7 +133,7 @@ class AiConsoleErrorInlayService(
         }
     }
 
-    /** 点击图标时只发送当前错误块文本，而不是整个控制台输出 */
+    /** When the icon is clicked, send only the current error block instead of the entire console output. */
     private fun sendErrorToAiTerminal(editor: Editor, rangeMarker: RangeMarker) {
         if (!rangeMarker.isValid) {
             AiTerminalBridgeService.notify(project, "The console error is no longer available.", NotificationType.WARNING)
@@ -149,11 +149,11 @@ class AiConsoleErrorInlayService(
             return
         }
 
-        val payload = "控制台错误：\n-------\n$errorText\n-------\n"
+        val payload = "Console error:\n-------\n$errorText\n-------\n"
         val dataContext = DataManager.getInstance().getDataContext(editor.component)
         when (val result = AiTerminalBridgeService.getInstance(project).sendDirectPaste(payload, dataContext)) {
             is AiTerminalBridgeService.BridgeResult.Success -> {
-                AiTerminalBridgeService.notify(project, "已发送控制台错误到 AI Terminal", NotificationType.INFORMATION)
+                AiTerminalBridgeService.notify(project, "Sent console error to AI Terminal", NotificationType.INFORMATION)
             }
             is AiTerminalBridgeService.BridgeResult.Scheduled -> {
             }

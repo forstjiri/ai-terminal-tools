@@ -1,16 +1,16 @@
-// monitor 模块共用数据模型
+// Shared data models for the monitor module
 package io.github.q110.aiterminaltools.monitor
 
 import java.nio.charset.Charset
 import java.nio.file.Path
 
-/** AI 终端工具类型 */
+/** AI terminal tool type. */
 enum class AiTool {
     OPENCODE,
     CLAUDE_CODE
 }
 
-/** Turn 事件类型 */
+/** Turn event type. */
 enum class AiTurnEventType {
     TURN_START,
     BEFORE_WRITE,
@@ -19,7 +19,7 @@ enum class AiTurnEventType {
     TURN_END_FAILED
 }
 
-/** 从 HTTP endpoint 接收到的事件 */
+/** Event received from the HTTP endpoint. */
 data class AiTurnEvent(
     val source: AiTool,
     val type: AiTurnEventType,
@@ -30,7 +30,7 @@ data class AiTurnEvent(
     val rawJson: String
 )
 
-/** 一轮对话的状态 */
+/** State of one conversation turn. */
 data class AiTurnState(
     val turnId: String,
     val tabId: String,
@@ -42,19 +42,19 @@ data class AiTurnState(
     val changedFiles: LinkedHashSet<Path> = linkedSetOf()
 )
 
-/** 文件修改前快照 */
+/** Snapshot taken before a file modification. */
 sealed interface FileSnapshot {
-    /** 文件不存在（新增场景） */
+    /** File does not exist (new file case). */
     data object Missing : FileSnapshot
 
-    /** 文本文件快照 */
+    /** Text file snapshot. */
     data class Text(
         val text: String,
         val charset: Charset,
         val fileTypeName: String?
     ) : FileSnapshot
 
-    /** 二进制文件快照 */
+    /** Binary file snapshot. */
     data class Binary(
         val bytes: ByteArray,
         val fileTypeName: String?
@@ -71,7 +71,7 @@ sealed interface FileSnapshot {
     }
 }
 
-/** 已注册的 AI 终端 tab 上下文 */
+/** Context for a registered AI terminal tab. */
 data class AiTerminalTabContext(
     val tabId: String,
     val token: String,
@@ -79,7 +79,7 @@ data class AiTerminalTabContext(
     val workingDirectory: Path,
     val createdAtMillis: Long
 ) {
-    /** 校验事件 token：事件未携带 token 时放行，否则必须匹配 */
+    /** Validate the event token: allow events without a token, otherwise require a match. */
     fun accepts(event: AiTurnEvent): Boolean {
         return event.token == null || event.token == token
     }

@@ -1,4 +1,4 @@
-// "发送文件/文件夹路径到 AI Terminal" Action — 项目树或编辑器标签页右键发送路径
+// "Send File/Folder Path to AI Terminal" action - sends paths from the project tree or editor tab context menu
 package io.github.q110.aiterminaltools.bridge
 
 import com.intellij.notification.NotificationType
@@ -14,26 +14,26 @@ class SendPathToAiTerminalAction : DumbAwareAction() {
         return ActionUpdateThread.BGT
     }
 
-    /** 根据选中项是文件还是文件夹动态改变菜单文字 */
+    /** Change the menu text dynamically based on whether the selection is a file or a folder. */
     override fun update(event: AnActionEvent) {
         val project = event.project
         val selectedFiles = selectedVirtualFiles(event)
         val virtualFile = selectedFiles.firstOrNull()
         val hasFile = selectedFiles.isNotEmpty()
         event.presentation.text = if (virtualFile?.isDirectory == true) {
-            "发送文件夹路径到 AI Terminal"
+            "Send Folder Path to AI Terminal"
         } else {
-            "发送文件路径到 AI Terminal"
+            "Send File Path to AI Terminal"
         }
         event.presentation.isEnabledAndVisible = project != null && hasFile
     }
 
-    /** 以 @path 格式发送路径，settleAtLineEnd=true 结束 @路径补全 */
+    /** Send the path in `@path` format; `settleAtLineEnd=true` ends `@path` completion. */
     override fun actionPerformed(event: AnActionEvent) {
         val project = event.project ?: return
         val virtualFile = selectedVirtualFiles(event).firstOrNull()
         if (virtualFile == null) {
-            AiTerminalBridgeService.notify(project, "没有找到要发送的文件或文件夹。", NotificationType.WARNING)
+            AiTerminalBridgeService.notify(project, "Could not find a file or folder to send.", NotificationType.WARNING)
             return
         }
 
@@ -43,7 +43,7 @@ class SendPathToAiTerminalAction : DumbAwareAction() {
                 .sendDirectInput(payload, event.dataContext, settleAtLineEnd = true)
         ) {
             is AiTerminalBridgeService.BridgeResult.Success -> {
-                AiTerminalBridgeService.notify(project, "已发送到 AI Terminal", NotificationType.INFORMATION)
+                AiTerminalBridgeService.notify(project, "Sent to AI Terminal", NotificationType.INFORMATION)
             }
             is AiTerminalBridgeService.BridgeResult.Scheduled -> {
             }
@@ -53,7 +53,7 @@ class SendPathToAiTerminalAction : DumbAwareAction() {
         }
     }
 
-    /** 获取选中文件：优先 VIRTUAL_FILE_ARRAY → VIRTUAL_FILE */
+    /** Get the selected files: prefer VIRTUAL_FILE_ARRAY -> VIRTUAL_FILE. */
     private fun selectedVirtualFiles(event: AnActionEvent): List<VirtualFile> {
         val selectedFiles = event.getData(CommonDataKeys.VIRTUAL_FILE_ARRAY)
         if (!selectedFiles.isNullOrEmpty()) {

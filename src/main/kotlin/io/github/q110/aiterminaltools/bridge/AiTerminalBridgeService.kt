@@ -76,7 +76,7 @@ class AiTerminalBridgeService(
         val payload = files.filter { it.isValid }
             .joinToString(separator = " ") { pathPayload(it) }
         if (payload.isBlank()) {
-            return BridgeResult.Error("没有找到要发送的文件或文件夹。")
+            return BridgeResult.Error("Could not find a file or folder to send.")
         }
 
         val terminal = selectedTerminal()
@@ -141,7 +141,7 @@ class AiTerminalBridgeService(
         } catch (exception: Throwable) {
             log.error("Failed to start AiTurnEventServer", exception)
             openCodeTerminalStartInProgress.set(false)
-            notify(project, "启动 AI Turn Event Server 失败：${exception.message}", NotificationType.WARNING)
+            notify(project, "Failed to start AI Turn Event Server: ${exception.message}", NotificationType.WARNING)
             return
         }
 
@@ -156,7 +156,7 @@ class AiTerminalBridgeService(
         } catch (exception: Throwable) {
             log.error("Failed to install OpenCode plugin", exception)
             openCodeTerminalStartInProgress.set(false)
-            notify(project, "安装 OpenCode Plugin 失败：${exception.message}", NotificationType.WARNING)
+            notify(project, "Failed to install the OpenCode plugin: ${exception.message}", NotificationType.WARNING)
             return
         }
 
@@ -188,7 +188,7 @@ class AiTerminalBridgeService(
         } catch (exception: Throwable) {
             log.error("Failed to start AiTurnEventServer", exception)
             claudeCodeTerminalStartInProgress.set(false)
-            notify(project, "启动 AI Turn Event Server 失败：${exception.message}", NotificationType.WARNING)
+            notify(project, "Failed to start AI Turn Event Server: ${exception.message}", NotificationType.WARNING)
             return
         }
 
@@ -203,7 +203,7 @@ class AiTerminalBridgeService(
         } catch (exception: Throwable) {
             log.error("Failed to install Claude hooks", exception)
             claudeCodeTerminalStartInProgress.set(false)
-            notify(project, "安装 Claude Code Hooks 失败：${exception.message}", NotificationType.WARNING)
+            notify(project, "Failed to install Claude Code hooks: ${exception.message}", NotificationType.WARNING)
             return
         }
 
@@ -276,13 +276,13 @@ class AiTerminalBridgeService(
             helper.runCommand(
                 tab,
                 command,
-                "已启动 $toolName 终端",
-                "启动 $toolName 失败"
+                "Started $toolName terminal",
+                "Failed to start $toolName"
             ) {
                 registerAiTerminal(TargetTerminal.Frontend(tab))
             }
         } catch (exception: Throwable) {
-            notify(project, "新版终端不可用，改用 Classic Terminal：${exception.message}", NotificationType.WARNING)
+            notify(project, "The new terminal is unavailable; falling back to Classic Terminal: ${exception.message}", NotificationType.WARNING)
             null
         }
     }
@@ -294,8 +294,8 @@ class AiTerminalBridgeService(
             legacyReworkedTerminalHelper.runCommand(
                 widget = widget,
                 command = command,
-                successMessage = "已启动 $toolName 终端",
-                failurePrefix = "运行 $command 失败",
+                successMessage = "Started $toolName terminal",
+                failurePrefix = "Failed to run $command",
                 onCommandSent = {
                     registerAiTerminal(TargetTerminal.LegacyReworked(widget))
                 },
@@ -307,7 +307,7 @@ class AiTerminalBridgeService(
                 }
             )
         } catch (exception: Throwable) {
-            notify(project, "Reworked Terminal 不可用，改用 Classic Terminal：${exception.message}", NotificationType.WARNING)
+            notify(project, "Reworked Terminal is unavailable; falling back to Classic Terminal: ${exception.message}", NotificationType.WARNING)
             null
         }
     }
@@ -333,7 +333,7 @@ class AiTerminalBridgeService(
             try {
                 ShellTerminalWidget.toShellJediTermWidgetOrThrow(widget).executeCommand(command)
                 registerAiTerminal(TargetTerminal.Classic(widget))
-                notify(project, "已启动 $toolName 终端", NotificationType.INFORMATION)
+                notify(project, "Started $toolName terminal", NotificationType.INFORMATION)
             } catch (exception: Throwable) {
                 notify(project, "Failed to run $command: ${exception.message}", NotificationType.WARNING)
             }
@@ -391,12 +391,12 @@ class AiTerminalBridgeService(
         when (ideBaselineVersion()) {
             251 -> notify(
                 project,
-                "使用 Classic Terminal 启动 $toolName。",
+                "Start $toolName using Classic Terminal.",
                 NotificationType.WARNING
             )
             252 -> notify(
                 project,
-                "使用 Classic Terminal 启动 $toolName。",
+                "Start $toolName using Classic Terminal.",
                 NotificationType.WARNING
             )
         }
@@ -416,7 +416,7 @@ class AiTerminalBridgeService(
             )
             is TargetTerminal.Frontend -> {
                 val helper = frontendHelper
-                    ?: return BridgeResult.Error("新版终端 API 在当前 IDE 中不可用。")
+                    ?: return BridgeResult.Error("The new terminal API is unavailable in the current IDE.")
                 helper.injectDirectInput(terminal.tab, payload, settleAtLineEnd)
             }
         }
@@ -475,11 +475,11 @@ class AiTerminalBridgeService(
         val connector = try {
             terminal.ttyConnector
         } catch (_: Throwable) {
-            return BridgeResult.Error("当前 Terminal 没有暴露可写入的 TTY 连接。")
-        } ?: return BridgeResult.Error("当前 Terminal 没有暴露可写入的 TTY 连接。")
+            return BridgeResult.Error("The current Terminal does not expose a writable TTY connector.")
+        } ?: return BridgeResult.Error("The current Terminal does not expose a writable TTY connector.")
 
         if (!connector.isConnected) {
-            return BridgeResult.Error("当前激活的 Terminal 已断开连接。")
+            return BridgeResult.Error("The currently active Terminal is disconnected.")
         }
 
         return try {
@@ -490,7 +490,7 @@ class AiTerminalBridgeService(
             }
             BridgeResult.Success
         } catch (exception: IOException) {
-            BridgeResult.Error("发送 AI Terminal 输入失败：${exception.message}")
+            BridgeResult.Error("Failed to send AI Terminal input: ${exception.message}")
         }
     }
 
@@ -500,7 +500,7 @@ class AiTerminalBridgeService(
             try {
                 writeLineEndSpace()
             } catch (exception: Throwable) {
-                notify(project, "发送 AI Terminal 行尾空格失败：${exception.message}", NotificationType.WARNING)
+                notify(project, "Failed to send AI Terminal line-end spacing: ${exception.message}", NotificationType.WARNING)
             }
         }.apply {
             isRepeats = false
@@ -567,7 +567,7 @@ class AiTerminalBridgeService(
         private const val NOTIFICATION_GROUP_ID = "AI Terminal Tools"
         private const val OPEN_CODE_TAB_NAME = "OpenCode"
         private const val CLAUDE_CODE_TAB_NAME = "Claude Code"
-        private const val NO_ACTIVE_TERMINAL_MESSAGE = "请先启动并激活 OpenCode 或 Claude Code 终端。"
+        private const val NO_ACTIVE_TERMINAL_MESSAGE = "Please start and activate an OpenCode or Claude Code terminal first."
         private const val LINE_END_SPACE = "\u0005 "
         private const val BRACKETED_PASTE_START = "\u001B[200~"
         private const val BRACKETED_PASTE_END = "\u001B[201~"

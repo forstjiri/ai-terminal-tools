@@ -1,4 +1,4 @@
-// 配置持久化层 — APP 级单例，存储到 ai-terminal-tools.xml
+// Configuration persistence layer - app-level singleton stored in ai-terminal-tools.xml
 package io.github.q110.aiterminaltools.settings
 
 import com.intellij.openapi.application.ApplicationManager
@@ -23,7 +23,7 @@ class AiTerminalToolsSettings : PersistentStateComponent<AiTerminalToolsSettings
         this.state = state
     }
 
-    /** 持久化字段定义，默认值均为开启 */
+    /** Persistent field definitions. Default values are enabled unless noted otherwise. */
     class StateData {
         var fileLinksEnabled: Boolean = true
         var copyLinksEnabled: Boolean = true
@@ -35,18 +35,18 @@ class AiTerminalToolsSettings : PersistentStateComponent<AiTerminalToolsSettings
         var commitMessageAdditionalPrompt: String = ""
         var additionalFileExtensions: String = ""
 
-        /** 已有配置文件反序列化时缺少该字段，兜底默认开启 */
+        /** Missing field in older persisted configs falls back to enabled. */
         fun isDragToAiTerminalEnabled(): Boolean {
             return dragToAiTerminalEnabled ?: true
         }
 
-        /** 用户未配置附加提示词时使用插件默认附加提示词。 */
+        /** Use the plugin default additional prompt when the user has not configured one. */
         fun resolvedCommitMessageAdditionalPrompt(): String {
             val customPrompt = commitMessageAdditionalPrompt.trim()
             return if (customPrompt.isNotEmpty()) customPrompt else DEFAULT_COMMIT_MESSAGE_ADDITIONAL_PROMPT
         }
 
-        /** 合并默认扩展名和用户追加扩展名。 */
+        /** Merge the default extensions with user-provided additions. */
         fun resolvedFileExtensions(): Set<String> {
             val customExtensions = additionalFileExtensions
                 .split(";")
@@ -61,10 +61,10 @@ class AiTerminalToolsSettings : PersistentStateComponent<AiTerminalToolsSettings
             private val EXTENSION_PATTERN = Regex("[a-z][a-z0-9]*")
 
             const val DEFAULT_COMMIT_MESSAGE_BASE_PROMPT: String =
-                "生成简洁的中文提交信息，按条目输出，不要过度思考，以最快的速度生成结果条目。"
+                "Generate concise English commit messages, output them as bullet points, and return results quickly without overthinking."
 
             const val DEFAULT_COMMIT_MESSAGE_ADDITIONAL_PROMPT: String =
-                "只写变更结果，不写技术细节。每条尽量短，避免出现反引号、Markdown 代码块、英文长句和具体实现描述，只输出普通文本条目。"
+                "Only write the result of the change. Do not include technical details. Keep each item short. Avoid backticks, Markdown code blocks, long sentences, and implementation details. Output plain text bullets only."
 
             val DEFAULT_FILE_EXTENSIONS = setOf(
                 "java", "kt", "kts", "gradle",

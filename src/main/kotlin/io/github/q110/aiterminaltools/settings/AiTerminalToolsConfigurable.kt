@@ -1,4 +1,4 @@
-// 设置面板 — 提供终端链接、控制台发送、拖拽和提交信息生成选项
+// Settings panel - provides options for terminal links, console sending, drag-and-drop, and commit message generation
 package io.github.q110.aiterminaltools.settings
 
 import com.intellij.openapi.options.Configurable
@@ -36,11 +36,11 @@ class AiTerminalToolsConfigurable : Configurable {
     }
 
     override fun createComponent(): JComponent {
-        // Commit message 模型按 AI 工具分别保存，切换下拉框时需要先保存当前输入。
-        val fileLinksCheckBox = JBCheckBox("启用文件跳转")
-        val copyLinksCheckBox = JBCheckBox("启用点击复制")
-        val errorToAiTerminalIconsCheckBox = JBCheckBox("启用控制台错误发送图标")
-        val dragToAiTerminalCheckBox = JBCheckBox("启用拖拽文件/文件夹到 AI 终端")
+        // Commit message models are stored per AI tool, so the current input must be saved before switching the dropdown.
+        val fileLinksCheckBox = JBCheckBox("Enable file links")
+        val copyLinksCheckBox = JBCheckBox("Enable click-to-copy")
+        val errorToAiTerminalIconsCheckBox = JBCheckBox("Enable console error send icons")
+        val dragToAiTerminalCheckBox = JBCheckBox("Enable drag-and-drop files/folders to AI Terminal")
         val commitMessageAiToolCombo = ComboBox(arrayOf(COMMIT_MESSAGE_AI_TOOL_OPENCODE_LABEL, COMMIT_MESSAGE_AI_TOOL_CLAUDE_LABEL))
         val commitMessageModelField = JBTextField()
         val commitMessageAdditionalPromptArea = JBTextArea(4, 48)
@@ -72,14 +72,14 @@ class AiTerminalToolsConfigurable : Configurable {
 
         constraints.gridy = 4
         constraints.insets = JBUI.insetsTop(4)
-        val dragHelpLabel = JBLabel("开启后拖拽文件/文件夹到任意终端均发送为 @路径。关闭后仅对插件启动的终端生效。")
+        val dragHelpLabel = JBLabel("When enabled, dragging files/folders to any terminal sends them as @paths. When disabled, this only works for terminals started by the plugin.")
         dragHelpLabel.foreground = JBColor.namedColor("Label.disabledForeground", JBColor(0x8c8c8c, 0x999999))
         dragHelpLabel.border = JBUI.Borders.emptyLeft(20)
         panel.add(dragHelpLabel, constraints)
 
         constraints.gridy = 5
         constraints.insets = JBUI.insetsTop(16)
-        panel.add(JLabel("提交信息 AI 工具："), constraints)
+        panel.add(JLabel("Commit message AI tool:"), constraints)
 
         constraints.gridy = 6
         constraints.insets = JBUI.insetsTop(4)
@@ -87,7 +87,7 @@ class AiTerminalToolsConfigurable : Configurable {
 
         constraints.gridy = 7
         constraints.insets = JBUI.insetsTop(16)
-        panel.add(JLabel("提交信息模型："), constraints)
+        panel.add(JLabel("Commit message model:"), constraints)
 
         constraints.gridy = 8
         constraints.insets = JBUI.insetsTop(4)
@@ -95,7 +95,7 @@ class AiTerminalToolsConfigurable : Configurable {
 
         constraints.gridy = 9
         constraints.insets = JBUI.insetsTop(16)
-        panel.add(JLabel("提交信息附加提示词："), constraints)
+        panel.add(JLabel("Commit message additional prompt:"), constraints)
 
         constraints.gridy = 10
         constraints.insets = JBUI.insetsTop(4)
@@ -105,14 +105,14 @@ class AiTerminalToolsConfigurable : Configurable {
 
         constraints.gridy = 11
         constraints.insets = JBUI.insetsTop(16)
-        panel.add(JLabel("额外文件扩展名："), constraints)
+        panel.add(JLabel("Additional file extensions:"), constraints)
 
         constraints.gridy = 12
         constraints.insets = JBUI.insetsTop(4)
         panel.add(additionalFileExtensionsField, constraints)
 
         constraints.gridy = 13
-        val additionalExtensionsHelpLabel = JBLabel("下面列表已默认支持，额外扩展名只填写未包含的项；使用英文分号分隔。")
+        val additionalExtensionsHelpLabel = JBLabel("The list below is supported by default. Only enter extensions not already included. Separate values with semicolons.")
         additionalExtensionsHelpLabel.foreground = JBColor.namedColor("Label.disabledForeground", JBColor(0x8c8c8c, 0x999999))
         additionalExtensionsHelpLabel.border = JBUI.Borders.emptyLeft(20)
         panel.add(additionalExtensionsHelpLabel, constraints)
@@ -176,7 +176,7 @@ class AiTerminalToolsConfigurable : Configurable {
             commitMessageAdditionalPromptArea?.text?.trim() != settings.commitMessageAdditionalPrompt
     }
 
-    /** 将当前 UI 状态写回持久化配置 */
+    /** Write the current UI state back to persistent settings. */
     override fun apply() {
         saveCurrentCommitMessageModel()
         val settings = AiTerminalToolsSettings.getInstance().getState()
@@ -191,7 +191,7 @@ class AiTerminalToolsConfigurable : Configurable {
         settings.commitMessageAdditionalPrompt = commitMessageAdditionalPromptArea?.text?.trim().orEmpty()
     }
 
-    /** 从持久化配置恢复 UI，同时避免触发模型切换时的二次写入 */
+    /** Restore the UI from persistent settings while avoiding extra writes during model switching. */
     override fun reset() {
         val settings = AiTerminalToolsSettings.getInstance().getState()
         fileLinksCheckBox?.isSelected = settings.fileLinksEnabled
@@ -230,7 +230,7 @@ class AiTerminalToolsConfigurable : Configurable {
         }
     }
 
-    /** 根据当前选择的 AI 工具展示对应模型占位说明和值 */
+    /** Show the model value for the currently selected AI tool. */
     private fun updateCommitMessageModelUi() {
         if (selectedCommitMessageAiTool == COMMIT_MESSAGE_AI_TOOL_CLAUDE) {
             commitMessageModelField?.text = claudeCommitMessageModel

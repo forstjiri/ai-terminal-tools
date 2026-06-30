@@ -1,4 +1,4 @@
-// 终端拖拽接收服务 — 将拖到当前激活终端标签的文件路径发送到该终端
+// Terminal drag-and-drop receiver - sends file paths dropped onto the active terminal tab to that terminal
 package io.github.q110.aiterminaltools.bridge
 
 import com.intellij.ide.dnd.DnDEvent
@@ -42,7 +42,7 @@ class AiTerminalDropService(
     private val classicCopyDisposables = mutableMapOf<Content, Disposable>()
     private var initialized = false
 
-    /** 监听终端工具窗口和内容切换，确保拖拽目标始终绑定到当前激活终端 */
+    /** Listen for terminal tool window and content switches so the drop target always tracks the active terminal. */
     fun initialize() {
         if (initialized) {
             return
@@ -70,7 +70,7 @@ class AiTerminalDropService(
     }
 
     fun refreshDropTarget() {
-        // 只给当前激活内容安装拖拽/Classic 点击复制监听，避免旧 tab 残留监听器。
+        // Only install drag-and-drop / Classic click-copy listeners on the current active content to avoid stale listeners from old tabs.
         val targetContent = currentActiveContent()
         val dropEnabled = targetContent != null && (dragToAiTerminalEnabled() || isRecordedAiTerminalContent(targetContent))
         val isClassic = targetContent != null && copyLinksEnabled() && isClassicContent(targetContent)
@@ -158,7 +158,7 @@ class AiTerminalDropService(
                 val files = draggedFiles(event)
                 val canDrop = canHandleDrop(files, content)
                 if (canDrop) {
-                    event.setDropPossible(true, "发送路径到 AI Terminal")
+                    event.setDropPossible(true, "Send path to AI Terminal")
                 }
                 canDrop
             }
@@ -226,7 +226,7 @@ class AiTerminalDropService(
         Disposer.dispose(disposable)
     }
 
-    /** Classic 终端不能稳定显示复制链接样式，改用鼠标点击文本范围检测 */
+    /** Classic terminals cannot reliably show click-copy link styling, so we use mouse-click text range detection instead. */
     private fun installClassicCopyForContent(content: Content) {
         if (classicCopyDisposables.containsKey(content)) {
             return

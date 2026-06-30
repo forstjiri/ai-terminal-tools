@@ -1,4 +1,4 @@
-// 文件快照服务 — 保存修改前的文件内容
+// File snapshot service - stores file contents before modifications
 package io.github.q110.aiterminaltools.monitor
 
 import com.intellij.openapi.components.Service
@@ -16,8 +16,8 @@ class AiTurnSnapshotService(
     private val log = Logger.getInstance(AiTurnSnapshotService::class.java)
 
     /**
-     * 在文件被修改前保存旧内容快照。
-     * 同一 path 只保存第一次旧快照，不会被后续修改覆盖。
+     * Save the pre-change snapshot before a file is modified.
+     * For the same path, only the first snapshot is kept and later changes do not overwrite it.
      */
     fun captureBeforeIfAbsent(turn: AiTurnState, path: Path) {
         if (turn.beforeSnapshots.containsKey(path)) return
@@ -61,7 +61,7 @@ class AiTurnSnapshotService(
     }
 
     private fun isBinary(bytes: ByteArray): Boolean {
-        // 检查前 8000 字节中是否有 NUL 字符（二进制文件特征）
+        // Check the first 8000 bytes for a NUL character, which indicates a binary file.
         val checkLength = minOf(bytes.size, 8000)
         for (i in 0 until checkLength) {
             if (bytes[i] == 0.toByte()) return true
@@ -70,7 +70,7 @@ class AiTurnSnapshotService(
     }
 
     private fun detectCharset(bytes: ByteArray): Charset {
-        // BOM 检测
+        // BOM detection
         if (bytes.size >= 3 &&
             bytes[0] == 0xEF.toByte() &&
             bytes[1] == 0xBB.toByte() &&
@@ -99,7 +99,7 @@ class AiTurnSnapshotService(
     }
 
     companion object {
-        /** 最大单文件快照大小：2 MB */
+        /** Maximum snapshot size per file: 2 MB */
         const val MAX_FILE_SIZE_BYTES = 2L * 1024 * 1024
     }
 }

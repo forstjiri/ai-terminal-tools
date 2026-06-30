@@ -32,40 +32,41 @@
             id="AiTerminalTools.SendSelectionToAiTerminal"
             class="io.github.q110.aiterminaltools.bridge.SendSelectionToAiTerminalAction"
             icon="/icons/send-selection.svg"
-            text="发送选区到 AI Terminal"
-            description="发送当前编辑器选区到激活的 AI 终端">
+            text="Send Selection to AI Terminal"
+            description="Send the current editor selection to the active AI terminal">
             <keyboard-shortcut keymap="$default" first-keystroke="control alt COMMA"/>
         </action>
         <action
             id="AiTerminalTools.SendPathToAiTerminal"
             class="io.github.q110.aiterminaltools.bridge.SendPathToAiTerminalAction"
             icon="/icons/send-selection.svg"
-            text="发送文件路径到 AI Terminal"
-            description="发送选中文件路径到激活的 AI 终端"/>
+            text="Send File Path to AI Terminal"
+            description="Send the selected file path to the active AI terminal"/>
         <action
             id="AiTerminalTools.StartOpenCode"
             class="io.github.q110.aiterminaltools.bridge.StartOpenCodeAction"
             icon="/icons/opencode-official-action.svg"
-            text="启动 OpenCode"
-            description="打开新终端并运行 opencode"/>
+            text="Start OpenCode"
+            description="Open a new terminal and run opencode"/>
         <action
             id="AiTerminalTools.StartClaudeCode"
             class="io.github.q110.aiterminaltools.bridge.StartClaudeCodeAction"
             icon="/icons/claude-code-official-action.svg"
-            text="启动 Claude Code"
-            description="打开新终端并运行 claude"/>
+            text="Start Claude Code"
+            description="Open a new terminal and run claude"/>
         <action
             id="AiTerminalTools.GenerateCommitMessage"
             class="io.github.q110.aiterminaltools.bridge.GenerateCommitMessageAction"
             icon="/icons/send-selection.svg"
-            text="生成提交信息"
-            description="根据已勾选文件生成简洁提交信息">
+            text="Generate Commit Message"
+            description="Generate a concise commit message from the checked files">
+            <add-to-group group-id="Vcs.MessageActionGroup" anchor="last"/>
             <add-to-group group-id="ChangesView.CommitToolbar" anchor="after" relative-to-action="Vcs.MessageActionGroup"/>
         </action>
         <action
             id="AiTerminalTools.ShowLastAiTurnDiff"
             class="io.github.q110.aiterminaltools.monitor.ShowLastAiTurnDiffAction"
-            text="显示上次 AI Turn Diff"
-            description="重新打开最近一轮 AI 修改的 Diff 窗口"/>
+            text="Show Last AI Turn Diff"
+            description="Reopen the most recent AI modification Diff window"/>
     </actions>
 </idea-plugin>

@@ -1,4 +1,4 @@
-// 提交信息生成动作 — 根据 Commit 面板已勾选文件调用 OpenCode / Claude Code 生成提交文案
+// Commit message generation action - uses the checked files in the Commit panel to generate text via OpenCode / Claude Code
 package io.github.q110.aiterminaltools.bridge
 
 import com.intellij.icons.AllIcons
@@ -15,6 +15,8 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.SystemInfo
+import com.intellij.openapi.vcs.CheckinProjectPanel
+import com.intellij.openapi.vcs.CommitMessageI
 import com.intellij.openapi.vcs.FilePath
 import com.intellij.openapi.vcs.VcsDataKeys
 import com.intellij.openapi.vcs.changes.Change
@@ -29,50 +31,58 @@ import java.util.concurrent.TimeUnit
 import java.util.UUID
 
 class GenerateCommitMessageAction : AnAction(AllIcons.Debugger.Console) {
-    /** Commit 面板工具栏动作需要在 EDT 根据勾选文件实时启用/禁用 */
+    /** The Commit panel toolbar action must enable/disable itself on the EDT based on the checked files. */
     override fun getActionUpdateThread(): ActionUpdateThread {
         return ActionUpdateThread.EDT
     }
 
     override fun update(event: AnActionEvent) {
+        val project = event.project
         val workflowUi = event.getData(VcsDataKeys.COMMIT_WORKFLOW_UI)
-        val hasIncludedFiles = workflowUi != null &&
-            (workflowUi.getIncludedChanges().isNotEmpty() || workflowUi.getIncludedUnversionedFiles().isNotEmpty())
-        event.presentation.isEnabled = event.project != null && hasIncludedFiles
-        event.presentation.isVisible = event.project != null && workflowUi != null
+        val messageControl = event.getData(VcsDataKeys.COMMIT_MESSAGE_CONTROL)
+        val workflowHandler = event.getData(VcsDataKeys.COMMIT_WORKFLOW_HANDLER)
+        val inCommitContext = workflowUi != null ||
+            messageControl is CommitMessageI ||
+            workflowHandler is CommitMessageI
+        event.presentation.isVisible = project != null && inCommitContext
+
+        val hasFiles = when {
+            workflowUi != null ->
+                workflowUi.getIncludedChanges().isNotEmpty() || workflowUi.getIncludedUnversionedFiles().isNotEmpty()
+            messageControl is CheckinProjectPanel ->
+                runCatching { messageControl.selectedChanges.isNotEmpty() }.getOrDefault(false)
+            else -> false
+        }
+        event.presentation.isEnabled = project != null && inCommitContext && hasFiles
     }
 
     override fun actionPerformed(event: AnActionEvent) {
         val project = event.project ?: return
-        val workflowUi = event.getData(VcsDataKeys.COMMIT_WORKFLOW_UI)
-        if (workflowUi == null) {
-            AiTerminalBridgeService.notify(project, "没有找到 Commit 面板上下文。", NotificationType.WARNING)
+        val context = resolveCommitContext(event)
+        val target = context.target
+        if (target == null) {
+            AiTerminalBridgeService.notify(project, "Could not find the Commit panel context.", NotificationType.WARNING)
+            return
+        }
+        if (context.changes.isEmpty() && context.unversionedFiles.isEmpty()) {
+            AiTerminalBridgeService.notify(project, "Please check the files you want to commit first.", NotificationType.WARNING)
             return
         }
 
-        val includedChanges = workflowUi.getIncludedChanges()
-        val includedUnversionedFiles = workflowUi.getIncludedUnversionedFiles()
-        if (includedChanges.isEmpty() && includedUnversionedFiles.isEmpty()) {
-            AiTerminalBridgeService.notify(project, "请先勾选要提交的文件。", NotificationType.WARNING)
-            return
-        }
-
-        val commitMessageUi = workflowUi.commitMessageUi
-        val currentMessage = commitMessageUi.text.trim()
+        val currentMessage = target.read().trim()
         if (currentMessage.isNotEmpty() && !confirmReplaceCommitMessage(project)) {
             return
         }
 
         val settings = AiTerminalToolsSettings.getInstance().getState()
         val commitMessageAiTool = normalizedCommitMessageAiTool(settings.commitMessageAiTool)
-        commitMessageUi.startLoading()
-        // AI CLI 调用和 git diff 收集都可能较慢，放到后台任务避免阻塞 Commit UI。
+        target.startLoading()
+        // AI CLI calls and git diff collection can be slow, so run them in a background task to avoid blocking the Commit UI.
         GenerateCommitMessageTask(
             project,
-            workflowUi,
-            commitMessageUi,
-            includedChanges,
-            includedUnversionedFiles,
+            target,
+            context.changes,
+            context.unversionedFiles,
             commitMessageAiTool
         ).queue()
     }
@@ -80,19 +90,18 @@ class GenerateCommitMessageAction : AnAction(AllIcons.Debugger.Console) {
     private fun confirmReplaceCommitMessage(project: Project): Boolean {
         return Messages.showYesNoDialog(
             project,
-            "当前区域已有内容，是否替换？",
-            "生成提交信息",
-            "替换",
-            "取消",
+            "The current area already has content. Replace it?",
+            "Generate Commit Message",
+            "Replace",
+            "Cancel",
             Messages.getQuestionIcon()
         ) == Messages.YES
     }
 
-    /** 后台任务负责收集变更、调用 AI CLI，并在 EDT 写回 Commit Message 输入框 */
+    /** The background task collects changes, calls the AI CLI, and writes back to the Commit Message input on the EDT. */
     private class GenerateCommitMessageTask(
         project: Project,
-        private val workflowUi: CommitWorkflowUi,
-        private val commitMessageUi: CommitMessageUi,
+        private val target: CommitMessageTarget,
         private val includedChanges: List<Change>,
         private val includedUnversionedFiles: List<FilePath>,
         private val commitMessageAiTool: String
@@ -108,23 +117,23 @@ class GenerateCommitMessageAction : AnAction(AllIcons.Debugger.Console) {
                 indicator.checkCanceled()
 
                 invokeOnEdt {
-                    commitMessageUi.setText(generatedMessage)
-                    commitMessageUi.focus()
-                    AiTerminalBridgeService.notify(project, "已生成提交信息", NotificationType.INFORMATION)
+                    target.write(generatedMessage)
+                    target.focus()
+                    AiTerminalBridgeService.notify(project, "Commit message generated", NotificationType.INFORMATION)
                 }
             } catch (exception: ProcessCanceledException) {
                 throw exception
             } catch (exception: CommitMessageGenerationException) {
                 invokeOnEdt {
-                    AiTerminalBridgeService.notify(project, exception.message ?: "生成提交信息失败", NotificationType.WARNING)
+                    AiTerminalBridgeService.notify(project, exception.message ?: "Failed to generate the commit message", NotificationType.WARNING)
                 }
             } catch (exception: Throwable) {
                 invokeOnEdt {
-                    AiTerminalBridgeService.notify(project, "生成提交信息失败：${exception.message}", NotificationType.WARNING)
+                    AiTerminalBridgeService.notify(project, "Failed to generate the commit message: ${exception.message}", NotificationType.WARNING)
                 }
             } finally {
                 invokeOnEdt {
-                    commitMessageUi.stopLoading()
+                    target.stopLoading()
                 }
             }
         }
@@ -132,20 +141,115 @@ class GenerateCommitMessageAction : AnAction(AllIcons.Debugger.Console) {
         private fun invokeOnEdt(action: () -> Unit) {
             ApplicationManager.getApplication().invokeLater(
                 {
-                    if (!project.isDisposed && !Disposer.isDisposed(workflowUi)) {
+                    if (!project.isDisposed && target.isActive()) {
                         action()
                     }
                 },
-ModalityState.any()
+                ModalityState.any()
             )
         }
+    }
+
+    /**
+     * Resolves the active commit context across both the new Commit workflow and the legacy
+     * commit dialog, returning a unified message target plus the selected changes.
+     */
+    private fun resolveCommitContext(event: AnActionEvent): ResolvedCommitContext {
+        var target: CommitMessageTarget? = null
+        var changes: List<Change> = emptyList()
+        var unversionedFiles: List<FilePath> = emptyList()
+
+        // New Commit workflow (typed API with loading state and unversioned file support).
+        val workflowUi = event.getData(VcsDataKeys.COMMIT_WORKFLOW_UI)
+        if (workflowUi != null) {
+            target = WorkflowCommitMessageTarget(workflowUi)
+            changes = workflowUi.getIncludedChanges().toList()
+            unversionedFiles = workflowUi.getIncludedUnversionedFiles().toList()
+        }
+
+        // Legacy commit dialog / modal commit handler.
+        if (target == null) {
+            val workflowHandler = event.getData(VcsDataKeys.COMMIT_WORKFLOW_HANDLER)
+            if (workflowHandler is CommitMessageI) {
+                target = LegacyCommitMessageTarget(workflowHandler)
+            }
+        }
+        val messageControl = event.getData(VcsDataKeys.COMMIT_MESSAGE_CONTROL)
+        if (target == null && messageControl is CommitMessageI) {
+            target = LegacyCommitMessageTarget(messageControl)
+        }
+        if (changes.isEmpty() && messageControl is CheckinProjectPanel) {
+            changes = runCatching { messageControl.selectedChanges.toList() }.getOrDefault(emptyList())
+        }
+
+        // Fallbacks for the change selection used by older commit views.
+        if (changes.isEmpty()) {
+            val selectedChanges = event.getData(VcsDataKeys.SELECTED_CHANGES)
+            if (!selectedChanges.isNullOrEmpty()) {
+                changes = selectedChanges.toList()
+            }
+        }
+        if (changes.isEmpty()) {
+            val allChanges = event.getData(VcsDataKeys.CHANGES)
+            if (!allChanges.isNullOrEmpty()) {
+                changes = allChanges.toList()
+            }
+        }
+
+        return ResolvedCommitContext(target, changes, unversionedFiles)
+    }
+
+    private data class ResolvedCommitContext(
+        val target: CommitMessageTarget?,
+        val changes: List<Change>,
+        val unversionedFiles: List<FilePath>
+    )
+
+    /** Unifies writing the generated message into either the new workflow UI or a legacy commit panel. */
+    private interface CommitMessageTarget {
+        fun read(): String
+        fun write(message: String)
+        fun startLoading()
+        fun stopLoading()
+        fun focus()
+        /** True while the target is still usable, so background callbacks can be skipped after the dialog closes. */
+        fun isActive(): Boolean
+    }
+
+    /** New Commit workflow target backed by the typed CommitMessageUi (supports loading state). */
+    private class WorkflowCommitMessageTarget(workflowUi: CommitWorkflowUi) : CommitMessageTarget {
+        private val messageUi: CommitMessageUi = workflowUi.commitMessageUi
+        private val disposable: CommitWorkflowUi = workflowUi
+
+        override fun read(): String = messageUi.text
+        override fun write(message: String) = messageUi.setText(message)
+        override fun startLoading() = messageUi.startLoading()
+        override fun stopLoading() = messageUi.stopLoading()
+        override fun focus() = messageUi.focus()
+        override fun isActive(): Boolean = !Disposer.isDisposed(disposable)
+    }
+
+    /** Legacy commit dialog target backed by CommitMessageI (setCommitMessage / getCommitMessage). */
+    private class LegacyCommitMessageTarget(private val panel: CommitMessageI) : CommitMessageTarget {
+        // The concrete panel classes (e.g. CheckinProjectPanel) expose commit-message getters/setters that are
+        // not declared on the CommitMessageI interface, so resolve them reflectively for version robustness.
+        override fun read(): String = invokeStringGetter(panel, "getCommitMessage", "getComment", "getText")
+        override fun write(message: String) {
+            invokeStringSetter(panel, "setCommitMessage", message)
+        }
+
+        // Legacy panels do not expose a loading indicator; these are no-ops.
+        override fun startLoading() = Unit
+        override fun stopLoading() = Unit
+        override fun focus() = Unit
+        override fun isActive(): Boolean = true
     }
 
     private interface CommitMessageGenerator {
         fun generate(indicator: ProgressIndicator): String
     }
 
-    /** 将 Commit 面板中真正勾选的文件整理成提示词上下文 */
+    /** Assemble the actually checked files in the Commit panel into prompt context. */
     private class CommitChangeSummary(
         private val project: Project,
         private val includedChanges: List<Change>,
@@ -153,20 +257,20 @@ ModalityState.any()
     ) {
         fun build(): String {
             val changedFiles = includedChanges.mapNotNull { change -> change.toIncludedFile(project) }
-            val unversionedFiles = includedUnversionedFiles.map { filePath -> filePath.toIncludedFile(project, "新增文件") }
+            val unversionedFiles = includedUnversionedFiles.map { filePath -> filePath.toIncludedFile(project, "New file") }
             val allFiles = changedFiles + unversionedFiles
             if (allFiles.isEmpty()) {
-                throw CommitMessageGenerationException("没有可用于生成提交文案的文件。")
+                throw CommitMessageGenerationException("No files are available for generating a commit message.")
             }
 
             val diffs = computeDiffs(allFiles)
             val sb = StringBuilder()
-            sb.appendLine("已勾选文件：")
+            sb.appendLine("Checked files:")
             for (file in allFiles) {
                 sb.appendLine("- ${file.status}: ${file.relativePath}")
             }
             sb.appendLine()
-            sb.appendLine("各文件变更内容（只分析以下文件的变更来生成提交信息）：")
+            sb.appendLine("Per-file changes (only the changes below are used to generate the commit message):")
             for (file in allFiles) {
                 val diff = diffs[file.relativePath] ?: ""
                 if (diff.isNotEmpty()) {
@@ -181,10 +285,10 @@ ModalityState.any()
         private fun computeDiffs(files: List<IncludedFile>): Map<String, String> {
             val diffs = linkedMapOf<String, String>()
             for (file in files) {
-                // 新增文件没有 git diff，直接读取文件内容；其他状态优先使用 git diff。
+                // New files do not have a git diff; read the file contents directly. Other states prefer git diff.
                 val content = when (file.status) {
-                    "新增" -> readFileContent(file.absolutePath)
-                    "删除" -> gitDiff(file.gitRoot, file.relativePath)
+                    "New" -> readFileContent(file.absolutePath)
+                    "Deleted" -> gitDiff(file.gitRoot, file.relativePath)
                     else -> gitDiff(file.gitRoot, file.relativePath)
                 }
                 if (!content.isNullOrBlank()) {
@@ -225,10 +329,10 @@ ModalityState.any()
     ) : CommitMessageGenerator {
         override fun generate(indicator: ProgressIndicator): String {
             val basePath = project.basePath
-                ?: throw CommitMessageGenerationException("项目没有可用的工作目录。")
+                ?: throw CommitMessageGenerationException("The project has no available working directory.")
             val settings = AiTerminalToolsSettings.getInstance().getState()
             val fullPrompt = buildPrompt(changeSummary)
-            // OpenCode 的 agent 配置写入临时 XDG_CONFIG_HOME，避免污染用户全局配置。
+            // Write the OpenCode agent configuration into a temporary XDG_CONFIG_HOME to avoid polluting the user's global config.
             val configHome = createOpenCodeConfigHome(fullPrompt)
             val basePathPath = Path.of(basePath).toAbsolutePath().normalize()
             val sessionTitle = "Generate commit message ${UUID.randomUUID()}"
@@ -248,27 +352,27 @@ ModalityState.any()
                 if (model.isNotEmpty()) {
                     command += listOf("-m", model)
                 }
-                command += "请根据系统提示生成提交信息"
+                command += "Generate a commit message based on the system instructions."
 
                 val result = runProcess(
                     command,
                     basePathPath,
                     OPENCODE_TIMEOUT_SECONDS,
                     indicator,
-                    "opencode 生成提交信息超时",
+                    "opencode commit message generation timed out",
                     environment = mapOf("XDG_CONFIG_HOME" to configHome.toString())
                 )
                 if (result.exitCode != 0) {
-                    throw CommitMessageGenerationException("opencode 执行失败：${result.output.take(ERROR_OUTPUT_LIMIT)}")
+                    throw CommitMessageGenerationException("opencode execution failed: ${result.output.take(ERROR_OUTPUT_LIMIT)}")
                 }
 
                 val message = cleanupOutput(result.output)
                 if (message.isBlank()) {
-                    throw CommitMessageGenerationException("opencode 没有返回可用的提交信息")
+                    throw CommitMessageGenerationException("opencode did not return a usable commit message")
                 }
                 return message
             } finally {
-                // opencode run 会创建临时 session，按标题和目录匹配后尽量清理。
+                // opencode run creates a temporary session; try to clean it up by matching the title and directory.
                 deleteSessionQuietly(sessionTitle, basePathPath)
                 configHome.toFile().deleteRecursively()
             }
@@ -306,14 +410,14 @@ ModalityState.any()
     ) : CommitMessageGenerator {
         override fun generate(indicator: ProgressIndicator): String {
             val basePath = project.basePath
-                ?: throw CommitMessageGenerationException("项目没有可用的工作目录。")
+                ?: throw CommitMessageGenerationException("The project has no available working directory.")
             val settings = AiTerminalToolsSettings.getInstance().getState()
             val prompt = buildPrompt(changeSummary)
             val basePathPath = Path.of(basePath).toAbsolutePath().normalize()
             val command = mutableListOf(
                 claudeCommand(),
                 "-p",
-                "请根据以上变更内容生成中文提交信息",
+                "Generate a commit message based on the changes provided via standard input.",
                 "--output-format",
                 "text",
                 "--no-session-persistence"
@@ -329,15 +433,15 @@ ModalityState.any()
                 prompt,
                 CLAUDE_TIMEOUT_SECONDS,
                 indicator,
-                "claude 生成提交信息超时"
+                "claude commit message generation timed out"
             )
             if (result.exitCode != 0) {
-                throw CommitMessageGenerationException("claude 执行失败：${result.output.take(ERROR_OUTPUT_LIMIT)}")
+                throw CommitMessageGenerationException("claude execution failed: ${result.output.take(ERROR_OUTPUT_LIMIT)}")
             }
 
             val message = cleanupOutput(result.output)
             if (message.isBlank()) {
-                throw CommitMessageGenerationException("claude 没有返回可用的提交信息")
+                throw CommitMessageGenerationException("claude did not return a usable commit message")
             }
             return message
         }
@@ -366,6 +470,24 @@ ModalityState.any()
         private const val COMMIT_MESSAGE_AI_TOOL_OPENCODE = "opencode"
         private const val COMMIT_MESSAGE_AI_TOOL_CLAUDE = "claude"
         private val ANSI_PATTERN = Regex("\\u001B\\[[;?0-9]*[ -/]*[@-~]")
+
+        /** Reads the commit text from a legacy panel by trying the getter names exposed by different impls. */
+        private fun invokeStringGetter(target: Any, vararg methodNames: String): String {
+            for (name in methodNames) {
+                val value = runCatching {
+                    target.javaClass.getMethod(name).invoke(target) as? String
+                }.getOrNull()
+                if (value != null) return value
+            }
+            return ""
+        }
+
+        /** Writes the commit text into a legacy panel via its setCommitMessage method. */
+        private fun invokeStringSetter(target: Any, methodName: String, value: String) {
+            runCatching {
+                target.javaClass.getMethod(methodName, String::class.java).invoke(target, value)
+            }
+        }
 
         private fun normalizedCommitMessageAiTool(aiTool: String): String {
             return if (aiTool == COMMIT_MESSAGE_AI_TOOL_CLAUDE) {
@@ -404,25 +526,25 @@ ClaudeCodeCommitMessageGenerator(project, changeSummary)
             val basePrompt = AiTerminalToolsSettings.StateData.DEFAULT_COMMIT_MESSAGE_BASE_PROMPT
             val additionalPrompt = settings.resolvedCommitMessageAdditionalPrompt()
             return """
-                根据以下变更内容生成提交信息。
+                Generate a commit message from the following changes.
 
-                只输出提交文案，不要解释，不要分析过程，不要 Markdown 代码块。
-                使用 "- " 分条。
-                不要编造变更中不存在的内容。
+                Output only the commit text. Do not explain, analyze, or use Markdown code blocks.
+                Use "- " bullet points.
+                Do not invent anything that is not present in the changes.
 
-                基础要求：
+                Base requirements:
                 $basePrompt
 
-                附加要求：
+                Additional requirements:
                 $additionalPrompt
 
-                变更内容：
+                Changes:
                 $summary
             """.trimIndent()
         }
 
         private fun cleanupOutput(output: String): String {
-            // 兼容 CLI 输出中的 ANSI 控制码、Markdown fence 和 Claude 引用前缀。
+            // Compatible with ANSI control codes, Markdown fences, and Claude quote prefixes in CLI output.
             val lines = output
                 .replace(ANSI_PATTERN, "")
                 .lineSequence()
@@ -444,10 +566,10 @@ ClaudeCodeCommitMessageGenerator(project, changeSummary)
         private fun Change.toIncludedFile(project: Project): IncludedFile? {
             val filePath = afterRevision?.file ?: beforeRevision?.file ?: return null
             val status = when {
-                beforeRevision == null -> "新增"
-                afterRevision == null -> "删除"
-                isMoved || isRenamed -> "重命名/移动"
-                else -> "修改"
+                beforeRevision == null -> "New"
+                afterRevision == null -> "Deleted"
+                isMoved || isRenamed -> "Renamed/Moved"
+                else -> "Modified"
             }
             return filePath.toIncludedFile(project, status)
         }
@@ -491,10 +613,10 @@ ClaudeCodeCommitMessageGenerator(project, changeSummary)
                     .redirectErrorStream(true)
                     .start()
             } catch (exception: Throwable) {
-                throw CommitMessageGenerationException("无法启动命令 ${command.firstOrNull().orEmpty()}：${exception.message}")
+                throw CommitMessageGenerationException("Cannot start command ${command.firstOrNull().orEmpty()}: ${exception.message}")
             }
             try {
-                // 无 stdin 的命令要主动关闭输入流，避免子进程等待输入。
+                // Commands without stdin should have their input stream closed to avoid the child process waiting for input.
                 process.outputStream.close()
             } catch (_: Throwable) {
             }
@@ -514,14 +636,14 @@ ClaudeCodeCommitMessageGenerator(project, changeSummary)
             while (true) {
                 if (indicator?.isCanceled == true) {
                     destroyProcessTree(process)
-                    throw CommitMessageGenerationException("已取消")
+                    throw CommitMessageGenerationException("Cancelled")
                 }
                 if (process.waitFor(PROCESS_POLL_INTERVAL_MS, TimeUnit.MILLISECONDS)) {
                     break
                 }
                 if (System.nanoTime() >= deadline) {
                     destroyProcessTree(process)
-                    throw CommitMessageGenerationException(timeoutMessage ?: "命令执行超时：${command.firstOrNull().orEmpty()}")
+                    throw CommitMessageGenerationException(timeoutMessage ?: "Command timed out: ${command.firstOrNull().orEmpty()}")
                 }
             }
             readerThread.join(TimeUnit.SECONDS.toMillis(2))
@@ -552,7 +674,7 @@ ClaudeCodeCommitMessageGenerator(project, changeSummary)
                     .redirectErrorStream(true)
                     .start()
             } catch (exception: Throwable) {
-                throw CommitMessageGenerationException("无法启动命令 ${command.firstOrNull().orEmpty()}：${exception.message}")
+                throw CommitMessageGenerationException("Cannot start command ${command.firstOrNull().orEmpty()}: ${exception.message}")
             }
             try {
                 process.outputStream.bufferedWriter(StandardCharsets.UTF_8).use { writer ->
@@ -577,14 +699,14 @@ ClaudeCodeCommitMessageGenerator(project, changeSummary)
             while (true) {
                 if (indicator?.isCanceled == true) {
                     destroyProcessTree(process)
-                    throw CommitMessageGenerationException("已取消")
+                    throw CommitMessageGenerationException("Cancelled")
                 }
                 if (process.waitFor(PROCESS_POLL_INTERVAL_MS, TimeUnit.MILLISECONDS)) {
                     break
                 }
                 if (System.nanoTime() >= deadline) {
                     destroyProcessTree(process)
-                    throw CommitMessageGenerationException(timeoutMessage ?: "命令执行超时：${command.firstOrNull().orEmpty()}")
+                    throw CommitMessageGenerationException(timeoutMessage ?: "Command timed out: ${command.firstOrNull().orEmpty()}")
                 }
             }
             readerThread.join(TimeUnit.SECONDS.toMillis(2))
@@ -592,7 +714,7 @@ ClaudeCodeCommitMessageGenerator(project, changeSummary)
         }
 
         private fun parseOpenCodeSessions(json: String): List<OpenCodeSession> {
-            // 不引入 JSON 库，按 OpenCode session list 的扁平对象输出做轻量解析。
+            // Avoid adding a JSON library; lightly parse the flat OpenCode session list output.
             return Regex("""\{[^{}]*\}""")
                 .findAll(json)
                 .mapNotNull { match ->
@@ -659,7 +781,7 @@ ClaudeCodeCommitMessageGenerator(project, changeSummary)
         }
 
         private fun createOpenCodeConfigHome(fullPrompt: String): Path {
-            // 只开启模型生成所需能力，禁止读写/命令工具参与提交文案生成。
+            // Enable only the capabilities needed for model generation; disallow read/write/command tools for commit message generation.
             val configHome = Files.createTempDirectory("opencode-commit-message-config")
             val configDir = configHome.resolve("opencode")
             Files.createDirectories(configDir)

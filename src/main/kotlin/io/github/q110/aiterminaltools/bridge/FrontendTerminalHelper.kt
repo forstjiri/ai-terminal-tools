@@ -1,4 +1,4 @@
-// Frontend Terminal 兼容层 — 通过反射适配 IDE 2025.3+ 新终端 API
+// Frontend Terminal compatibility layer - adapts the IDE 2025.3+ terminal API via reflection
 package io.github.q110.aiterminaltools.bridge
 
 import com.intellij.notification.NotificationType
@@ -20,7 +20,7 @@ class FrontendTerminalHelper(
         .getMethod("getInstance", Project::class.java)
         .invoke(null, project)
 
-    /** 当前选中的终端 Content 需要反查到 frontend tab 对象才能写入输入区 */
+    /** The selected terminal Content must be mapped back to the frontend tab object before we can write to the input area. */
     fun selectedTerminal(): Any? {
         val selectedContent = ToolWindowManager.getInstance(project)
             .getToolWindow(TERMINAL_TOOL_WINDOW_ID)
@@ -39,12 +39,12 @@ class FrontendTerminalHelper(
         builder = tabBuilderMethod("workingDirectory", String::class.java).invoke(builder, workingDirectory)
         builder = tabBuilderMethod("tabName", String::class.java).invoke(builder, tabName)
         builder = tabBuilderMethod("requestFocus", Boolean::class.javaPrimitiveType).invoke(builder, true)
-        // 等 UI 完整显示后再启动会话，避免 2025.3+ 首次渲染宽度异常。
+        // Wait until the UI is fully shown before starting the session to avoid first-render width glitches in 2025.3+.
         builder = tabBuilderMethod("deferSessionStartUntilUiShown", Boolean::class.javaPrimitiveType).invoke(builder, true)
         return tabBuilderMethod("createTab").invoke(builder)
     }
 
-    /** 在前端终端获得焦点后执行命令，避免命令写入到旧焦点组件 */
+    /** Run the command after the frontend terminal receives focus to avoid writing into an old focused component. */
     fun runCommand(
         tab: Any,
         command: String,
@@ -95,7 +95,7 @@ class FrontendTerminalHelper(
         return contentOf(tab) == content
     }
 
-    /** 直接写入输入区，settleAtLineEnd 用于结束 @path 补全状态 */
+    /** Write directly to the input area; settleAtLineEnd is used to end `@path` completion state. */
     fun injectDirectInput(tab: Any, payload: String, settleAtLineEnd: Boolean): BridgeResult {
         val content = contentOf(tab)
             ?: return BridgeResult.Error("Invalid frontend terminal tab.")
@@ -118,7 +118,7 @@ class FrontendTerminalHelper(
                         try {
                             sendDirectInput(view, focusComponent, payload, settleAtLineEnd)
                         } catch (exception: Throwable) {
-                            AiTerminalBridgeService.notify(project, "发送 AI Terminal 输入失败：${exception.message}", NotificationType.WARNING)
+                            AiTerminalBridgeService.notify(project, "Failed to send AI Terminal input: ${exception.message}", NotificationType.WARNING)
                         }
                     })
                     focusCallback.doWhenRejected(Runnable {
@@ -144,7 +144,7 @@ class FrontendTerminalHelper(
         if (settleAtLineEnd) {
             scheduleLineEndSpace(view, focusComponent, true)
         } else {
-            AiTerminalBridgeService.notify(project, "已发送到 AI Terminal", NotificationType.INFORMATION)
+            AiTerminalBridgeService.notify(project, "Sent to AI Terminal", NotificationType.INFORMATION)
         }
     }
 
@@ -156,14 +156,14 @@ class FrontendTerminalHelper(
                     .doWhenDone(Runnable {
                         sendLineEndSpace(view)
                         if (notifyAfter) {
-                            AiTerminalBridgeService.notify(project, "已发送到 AI Terminal", NotificationType.INFORMATION)
+                            AiTerminalBridgeService.notify(project, "Sent to AI Terminal", NotificationType.INFORMATION)
                         }
                     })
                     .doWhenRejected(Runnable {
                         AiTerminalBridgeService.notify(project, "Cannot focus the AI terminal input component.", NotificationType.WARNING)
                     })
             } catch (exception: Throwable) {
-                AiTerminalBridgeService.notify(project, "发送 AI Terminal 行尾空格失败：${exception.message}", NotificationType.WARNING)
+                AiTerminalBridgeService.notify(project, "Failed to send AI Terminal line-end spacing: ${exception.message}", NotificationType.WARNING)
             }
         }
         timer.isRepeats = false
@@ -211,7 +211,7 @@ class FrontendTerminalHelper(
         return view.javaClass.getMethod("getPreferredFocusableComponent").invoke(view) as? JComponent
     }
 
-    /** Frontend Terminal API 仍在变化，所有调用点集中通过反射兜底 */
+    /** The Frontend Terminal API is still evolving, so all call sites go through reflection fallback here. */
     private fun tabsManagerMethod(name: String, vararg parameterTypes: Class<*>?): java.lang.reflect.Method {
         return tabsManagerClass.getMethod(name, *parameterTypes)
     }
