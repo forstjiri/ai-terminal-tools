@@ -1,4 +1,4 @@
-// "Send Selection to AI Terminal" action - sends the selected editor code through the bridge to the currently active AI terminal input area
+// "Send Selection to AI Terminal" action — sends selected editor code to the active AI terminal input.
 package io.github.q110.aiterminaltools.bridge
 
 import com.intellij.notification.NotificationType
@@ -23,19 +23,19 @@ class SendSelectionToAiTerminalAction : AnAction(AllIcons.Debugger.Console) {
         event.presentation.isEnabled = project != null && hasSelection
     }
 
-    /** Build the payload and call the bridge service. */
+    /** Builds the payload and invokes the bridge service. */
     override fun actionPerformed(event: AnActionEvent) {
         val project = event.project ?: return
         val editor = event.getData(CommonDataKeys.EDITOR)
         if (editor == null) {
-            AiTerminalBridgeService.notify(project, "Could not find the current editor.", NotificationType.WARNING)
+            AiTerminalBridgeService.notify(project, "The current editor was not found.", NotificationType.WARNING)
             return
         }
 
         val selectionModel = editor.selectionModel
         val selectedText = selectionModel.selectedText
         if (selectedText.isNullOrEmpty()) {
-            AiTerminalBridgeService.notify(project, "Please select the code you want to send to AI Terminal first.", NotificationType.WARNING)
+            AiTerminalBridgeService.notify(project, "Select the code to send to AI Terminal first.", NotificationType.WARNING)
             return
         }
 

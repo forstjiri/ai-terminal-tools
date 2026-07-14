@@ -59,14 +59,13 @@
             class="io.github.q110.aiterminaltools.bridge.GenerateCommitMessageAction"
             icon="/icons/send-selection.svg"
             text="Generate Commit Message"
-            description="Generate a concise commit message from the checked files">
+            description="Generate concise commit messages from the selected files">
             <add-to-group group-id="Vcs.MessageActionGroup" anchor="last"/>
-            <add-to-group group-id="ChangesView.CommitToolbar" anchor="after" relative-to-action="Vcs.MessageActionGroup"/>
         </action>
         <action
             id="AiTerminalTools.ShowLastAiTurnDiff"
             class="io.github.q110.aiterminaltools.monitor.ShowLastAiTurnDiffAction"
             text="Show Last AI Turn Diff"
-            description="Reopen the most recent AI modification Diff window"/>
+            description="Reopen the diff window for the latest AI changes"/>
     </actions>
 </idea-plugin>

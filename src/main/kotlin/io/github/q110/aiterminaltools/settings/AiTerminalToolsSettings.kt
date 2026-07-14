@@ -1,4 +1,4 @@
-// Configuration persistence layer - app-level singleton stored in ai-terminal-tools.xml
+// Persistent settings service shared at the application level and stored in ai-terminal-tools.xml.
 package io.github.q110.aiterminaltools.settings
 
 import com.intellij.openapi.application.ApplicationManager
@@ -23,7 +23,7 @@ class AiTerminalToolsSettings : PersistentStateComponent<AiTerminalToolsSettings
         this.state = state
     }
 
-    /** Persistent field definitions. Default values are enabled unless noted otherwise. */
+    /** Persistent fields; feature flags are enabled by default. */
     class StateData {
         var fileLinksEnabled: Boolean = true
         var copyLinksEnabled: Boolean = true
@@ -32,10 +32,12 @@ class AiTerminalToolsSettings : PersistentStateComponent<AiTerminalToolsSettings
         var commitMessageAiTool: String = "opencode"
         var commitMessageModel: String = ""
         var claudeCommitMessageModel: String = ""
+        var openCodeTerminalCommand: String = ""
+        var claudeCodeTerminalCommand: String = ""
         var commitMessageAdditionalPrompt: String = ""
         var additionalFileExtensions: String = ""
 
-        /** Missing field in older persisted configs falls back to enabled. */
+        /** Fall back to enabled when older configuration files lack this field. */
         fun isDragToAiTerminalEnabled(): Boolean {
             return dragToAiTerminalEnabled ?: true
         }
@@ -46,7 +48,7 @@ class AiTerminalToolsSettings : PersistentStateComponent<AiTerminalToolsSettings
             return if (customPrompt.isNotEmpty()) customPrompt else DEFAULT_COMMIT_MESSAGE_ADDITIONAL_PROMPT
         }
 
-        /** Merge the default extensions with user-provided additions. */
+        /** Combine the default extensions with user-added extensions. */
         fun resolvedFileExtensions(): Set<String> {
             val customExtensions = additionalFileExtensions
                 .split(";")
@@ -61,10 +63,10 @@ class AiTerminalToolsSettings : PersistentStateComponent<AiTerminalToolsSettings
             private val EXTENSION_PATTERN = Regex("[a-z][a-z0-9]*")
 
             const val DEFAULT_COMMIT_MESSAGE_BASE_PROMPT: String =
-                "Generate concise English commit messages, output them as bullet points, and return results quickly without overthinking."
+                "Write concise English commit messages. Output one message per item without overthinking."
 
             const val DEFAULT_COMMIT_MESSAGE_ADDITIONAL_PROMPT: String =
-                "Only write the result of the change. Do not include technical details. Keep each item short. Avoid backticks, Markdown code blocks, long sentences, and implementation details. Output plain text bullets only."
+                "Describe only the changes, not technical details. Keep each item short. Do not use backticks, Markdown code blocks, long sentences, or implementation details; output plain-text items only."
 
             val DEFAULT_FILE_EXTENSIONS = setOf(
                 "java", "kt", "kts", "gradle",

@@ -1,4 +1,4 @@
-// Terminal drag-and-drop receiver - sends file paths dropped onto the active terminal tab to that terminal
+// Terminal drag-and-drop service — sends paths dropped onto the active terminal tab to that terminal.
 package io.github.q110.aiterminaltools.bridge
 
 import com.intellij.ide.dnd.DnDEvent
@@ -42,7 +42,7 @@ class AiTerminalDropService(
     private val classicCopyDisposables = mutableMapOf<Content, Disposable>()
     private var initialized = false
 
-    /** Listen for terminal tool window and content switches so the drop target always tracks the active terminal. */
+    /** Watches terminal-window and content changes so the drop target stays bound to the active terminal. */
     fun initialize() {
         if (initialized) {
             return
@@ -70,7 +70,7 @@ class AiTerminalDropService(
     }
 
     fun refreshDropTarget() {
-        // Only install drag-and-drop / Classic click-copy listeners on the current active content to avoid stale listeners from old tabs.
+        // Install drag/click-to-copy listeners only on the active content to avoid stale listeners on old tabs.
         val targetContent = currentActiveContent()
         val dropEnabled = targetContent != null && (dragToAiTerminalEnabled() || isRecordedAiTerminalContent(targetContent))
         val isClassic = targetContent != null && copyLinksEnabled() && isClassicContent(targetContent)
@@ -158,7 +158,7 @@ class AiTerminalDropService(
                 val files = draggedFiles(event)
                 val canDrop = canHandleDrop(files, content)
                 if (canDrop) {
-                    event.setDropPossible(true, "Send path to AI Terminal")
+                    event.setDropPossible(true, "Send Path to AI Terminal")
                 }
                 canDrop
             }
@@ -226,7 +226,7 @@ class AiTerminalDropService(
         Disposer.dispose(disposable)
     }
 
-    /** Classic terminals cannot reliably show click-copy link styling, so we use mouse-click text range detection instead. */
+    /** Classic terminals cannot reliably display copy-link styling, so detect text ranges on mouse clicks instead. */
     private fun installClassicCopyForContent(content: Content) {
         if (classicCopyDisposables.containsKey(content)) {
             return

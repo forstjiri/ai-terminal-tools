@@ -1,20 +1,22 @@
-// Hook installer - generates Claude hook configuration, hook scripts, and launcher scripts
+// Hook installer — generates Claude hook configuration, hook scripts, and launcher scripts
 package io.github.q110.aiterminaltools.monitor
 
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
+import io.github.q110.aiterminaltools.ProjectBasePath
+import io.github.q110.aiterminaltools.settings.AiTerminalToolsSettings
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermission
 
 /**
- * Generates the following for Claude Code:
- * 1. `.claude/settings.local.json` - hook configuration
- * 2. `.idea/ai-terminal-tools/claude-hook.cmd` - Windows cmd wrapper
- * 3. `.idea/ai-terminal-tools/claude-hook.ps1` - PowerShell hook implementation
- * 4. `.idea/ai-terminal-tools/claude-hook.sh` - macOS/Linux hook implementation
- * 5. `.idea/ai-terminal-tools/run-claude-<tabId>.cmd` - Windows launcher
- * 6. `.idea/ai-terminal-tools/run-claude-<tabId>.sh` - macOS/Linux launcher
+ * Generate the following for Claude Code:
+ * 1. `.claude/settings.local.json` — hook configuration
+ * 2. `.idea/ai-terminal-tools/claude-hook.cmd` — Windows cmd wrapper
+ * 3. `.idea/ai-terminal-tools/claude-hook.ps1` — PowerShell hook implementation
+ * 4. `.idea/ai-terminal-tools/claude-hook.sh` — macOS/Linux hook implementation
+ * 5. `.idea/ai-terminal-tools/run-claude-<tabId>.cmd` — Windows launcher
+ * 6. `.idea/ai-terminal-tools/run-claude-<tabId>.sh` — macOS/Linux launcher
  */
 class AiTurnHookInstaller(
     private val project: Project
@@ -22,30 +24,29 @@ class AiTurnHookInstaller(
     private val log = Logger.getInstance(AiTurnHookInstaller::class.java)
 
     /**
-     * 安装 Claude Code hooks 并生成 launcher 脚本。
-     * 返回 launcher 脚本的文件名（不含路径，相对于 .idea/ai-terminal-tools/）。
+     * Install Claude Code hooks and generate launcher scripts.
+     * Return launcher filenames (without paths, relative to .idea/ai-terminal-tools/).
      */
-    fun installClaudeHooks(tabId: String, token: String, port: Int): LauncherPaths {
-        val projectBasePath = project.basePath
-            ?: throw IllegalStateException("Project base path is null")
-        val basePath = Path.of(projectBasePath)
+    fun installClaudeHooks(basePath: Path, tabId: String, token: String, port: Int): LauncherPaths {
+        val validatedBasePath = ProjectBasePath.requireValid(basePath)
 
-        // 1. Ensure the `.idea/ai-terminal-tools/` directory exists.
-        val toolsDir = basePath.resolve(".idea").resolve("ai-terminal-tools")
+        // 1. Ensure the .idea/ai-terminal-tools/ directory exists
+        val toolsDir = validatedBasePath.resolve(".idea").resolve("ai-terminal-tools")
+        ProjectBasePath.requireValid(validatedBasePath)
         Files.createDirectories(toolsDir)
 
-        // 2. Generate the hook scripts.
+        // 2. Generate hook scripts
         writeHookScripts(toolsDir)
 
-        // 3. Generate or merge `.claude/settings.local.json`.
-        writeClaudeSettings(basePath, toolsDir)
+        // 3. Generate/merge .claude/settings.local.json
+        writeClaudeSettings(validatedBasePath, toolsDir)
 
-        // 4. Generate the launcher scripts.
+        // 4. Generate launcher scripts
         return writeLauncherScripts(toolsDir, tabId, token, port)
     }
 
     private fun writeHookScripts(toolsDir: Path) {
-        // `claude-hook.cmd` - Windows cmd wrapper that delegates to PowerShell.
+        // claude-hook.cmd — Windows cmd wrapper delegated to PowerShell
         val hookCmd = toolsDir.resolve("claude-hook.cmd")
         Files.writeString(hookCmd, buildString {
             appendLine("@echo off")
@@ -53,7 +54,7 @@ class AiTurnHookInstaller(
             appendLine("powershell -NoProfile -ExecutionPolicy Bypass -File \"%~dp0claude-hook.ps1\" \"%EVENT_TYPE%\"")
         })
 
-        // `claude-hook.ps1` - PowerShell implementation.
+        // claude-hook.ps1 — PowerShell implementation
         val hookPs1 = toolsDir.resolve("claude-hook.ps1")
         Files.writeString(hookPs1, buildString {
             appendLine("param(")
@@ -99,7 +100,7 @@ class AiTurnHookInstaller(
             appendLine("}")
         })
 
-        // `claude-hook.sh` - macOS/Linux bash implementation.
+        // claude-hook.sh — macOS/Linux bash implementation
         val hookSh = toolsDir.resolve("claude-hook.sh")
         Files.writeString(hookSh, buildString {
             appendLine("#!/usr/bin/env bash")
@@ -127,23 +128,24 @@ class AiTurnHookInstaller(
             appendLine("  2>/dev/null || true")
         })
 
-        // Mark the shell script executable on non-Windows platforms.
+        // Set executable permissions on sh (non-Windows)
         setExecutableIfPosix(hookSh)
     }
 
     private fun writeClaudeSettings(projectBasePath: Path, toolsDir: Path) {
         val claudeDir = projectBasePath.resolve(".claude")
+        ProjectBasePath.requireValid(projectBasePath)
         Files.createDirectories(claudeDir)
 
         val settingsFile = claudeDir.resolve("settings.local.json")
 
-        // Use ${CLAUDE_PROJECT_DIR} + forward slashes to match the official docs.
-        //    - ${CLAUDE_PROJECT_DIR} is expanded by Claude Code when the hook runs and always points to the project root
-        //    - Forward slashes are portable across Git Bash / WSL / Linux / macOS
-        //    - Always use the .sh script (Windows Claude Code uses Git Bash's /usr/bin/bash)
+        // Use ${CLAUDE_PROJECT_DIR} with slash paths, matching the official documentation example.
+        //    - Claude Code expands ${CLAUDE_PROJECT_DIR} when running the hook; it always points to the project root
+        //    - Slashes work across Git Bash / WSL / Linux / macOS
+        //    - Always use the .sh script (on Windows Claude Code uses Git Bash's /usr/bin/bash)
         val hookCommand = "\${CLAUDE_PROJECT_DIR}/.idea/ai-terminal-tools/claude-hook.sh"
 
-        // Read any existing configuration and merge it.
+        // Read and merge the existing configuration
         val existingContent = if (Files.exists(settingsFile)) {
             try {
                 Files.readString(settingsFile)
@@ -160,18 +162,18 @@ class AiTurnHookInstaller(
     }
 
     /**
-     * 生成 Claude settings.local.json 内容。
-     * 如果已有配置存在，保留非 hooks 字段。
+     * Generate Claude settings.local.json content.
+     * Preserve non-hooks fields when an existing configuration is present.
      */
     private fun generateClaudeSettingsJson(hookCommand: String, existingContent: String?): String {
-        // JSON-escape 反斜杠（Windows 路径需要 \\ → \\\\）
+        // JSON-escape backslashes (Windows paths require \\ → \\\\)
         val escapedCommand = hookCommand.replace("\\", "\\\\")
 
-        // Build the new hooks JSON.
+        // Build the new hooks JSON
         val hooksJson = buildString {
             appendLine("{")
 
-            // Preserve the existing non-hooks fields.
+            // Preserve non-hooks fields from the existing configuration
             if (existingContent != null) {
                 val nonHooksFields = extractNonHooksFields(existingContent)
                 if (nonHooksFields.isNotEmpty()) {
@@ -241,15 +243,15 @@ class AiTurnHookInstaller(
     }
 
     /**
-     * 从已有 JSON 中提取非 hooks 的顶层字段。
-     * Simple implementation: find all `"key": value` pairs and exclude `hooks`.
+     * Extract top-level non-hooks fields from existing JSON.
+     * Simple implementation: find all "key": value pairs and exclude "hooks".
      */
     private fun extractNonHooksFields(json: String): String {
-        // Simplified handling: if the original JSON contains top-level fields other than hooks, try to preserve them.
-        // Without a JSON library, this only does lightweight string processing.
+        // Simplified handling: preserve top-level fields other than hooks when present in the original JSON
+        // Without a JSON library, this uses simple string processing only
         val fields = mutableListOf<String>()
 
-        // Match simple `"key": "value"` fields.
+        // Match simple fields in the form "key": "value"
         val simpleFieldPattern = Regex("""^\s*"([^"]+)"\s*:\s*("[^"]*"|true|false|\d+)\s*,?\s*$""", RegexOption.MULTILINE)
         for (match in simpleFieldPattern.findAll(json)) {
             val key = match.groupValues[1]
@@ -269,6 +271,8 @@ class AiTurnHookInstaller(
     ): LauncherPaths {
         val cmdFile = toolsDir.resolve("run-claude-$tabId.cmd")
         val shFile = toolsDir.resolve("run-claude-$tabId.sh")
+        val customCommand = AiTerminalToolsSettings.getInstance().getState().claudeCodeTerminalCommand.trim()
+        val execCommand = customCommand.ifEmpty { "claude" }
 
         // Windows cmd launcher
         Files.writeString(cmdFile, buildString {
@@ -277,7 +281,7 @@ class AiTurnHookInstaller(
             appendLine("set AITT_TOKEN=$token")
             appendLine("set AITT_TAB_ID=$tabId")
             appendLine("set AITT_TOOL=claude")
-            appendLine("claude")
+            appendLine(execCommand)
         })
 
         // macOS/Linux bash launcher
@@ -287,7 +291,7 @@ class AiTurnHookInstaller(
             appendLine("export AITT_TOKEN=\"$token\"")
             appendLine("export AITT_TAB_ID=\"$tabId\"")
             appendLine("export AITT_TOOL=\"claude\"")
-            appendLine("exec claude")
+            appendLine("exec $execCommand")
         })
 
         setExecutableIfPosix(shFile)
@@ -298,10 +302,9 @@ class AiTurnHookInstaller(
         )
     }
 
-    /** Clean up launcher scripts for the specified tabId. */
-    fun cleanupLauncherScripts(tabId: String) {
-        val projectBasePath = project.basePath ?: return
-        val toolsDir = Path.of(projectBasePath).resolve(".idea").resolve("ai-terminal-tools")
+    /** Clean up launcher scripts for the specified tabId */
+    fun cleanupLauncherScripts(basePath: Path, tabId: String) {
+        val toolsDir = basePath.resolve(".idea").resolve("ai-terminal-tools")
         try {
             Files.deleteIfExists(toolsDir.resolve("run-claude-$tabId.cmd"))
             Files.deleteIfExists(toolsDir.resolve("run-claude-$tabId.sh"))
@@ -317,7 +320,7 @@ class AiTurnHookInstaller(
             perms.add(PosixFilePermission.GROUP_EXECUTE)
             Files.setPosixFilePermissions(path, perms)
         } catch (_: UnsupportedOperationException) {
-            // Windows does not support POSIX permissions.
+            // Windows does not support POSIX permissions
         } catch (exception: Throwable) {
             log.warn("Failed to set executable permission on $path", exception)
         }

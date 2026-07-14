@@ -1,4 +1,4 @@
-// Frontend Terminal compatibility layer - adapts the IDE 2025.3+ terminal API via reflection
+// Frontend Terminal compatibility layer — adapts the IDE 2025.3+ terminal API through reflection.
 package io.github.q110.aiterminaltools.bridge
 
 import com.intellij.notification.NotificationType
@@ -20,7 +20,7 @@ class FrontendTerminalHelper(
         .getMethod("getInstance", Project::class.java)
         .invoke(null, project)
 
-    /** The selected terminal Content must be mapped back to the frontend tab object before we can write to the input area. */
+    /** The selected terminal Content must be mapped back to its frontend tab before writing to its input. */
     fun selectedTerminal(): Any? {
         val selectedContent = ToolWindowManager.getInstance(project)
             .getToolWindow(TERMINAL_TOOL_WINDOW_ID)
@@ -39,12 +39,12 @@ class FrontendTerminalHelper(
         builder = tabBuilderMethod("workingDirectory", String::class.java).invoke(builder, workingDirectory)
         builder = tabBuilderMethod("tabName", String::class.java).invoke(builder, tabName)
         builder = tabBuilderMethod("requestFocus", Boolean::class.javaPrimitiveType).invoke(builder, true)
-        // Wait until the UI is fully shown before starting the session to avoid first-render width glitches in 2025.3+.
+        // Start the session after the UI is fully shown to avoid first-render width issues in 2025.3+.
         builder = tabBuilderMethod("deferSessionStartUntilUiShown", Boolean::class.javaPrimitiveType).invoke(builder, true)
         return tabBuilderMethod("createTab").invoke(builder)
     }
 
-    /** Run the command after the frontend terminal receives focus to avoid writing into an old focused component. */
+    /** Executes the command after focusing the frontend terminal, avoiding writes to a stale component. */
     fun runCommand(
         tab: Any,
         command: String,
@@ -95,7 +95,7 @@ class FrontendTerminalHelper(
         return contentOf(tab) == content
     }
 
-    /** Write directly to the input area; settleAtLineEnd is used to end `@path` completion state. */
+    /** Writes directly to the input; settleAtLineEnd finishes @path completion. */
     fun injectDirectInput(tab: Any, payload: String, settleAtLineEnd: Boolean): BridgeResult {
         val content = contentOf(tab)
             ?: return BridgeResult.Error("Invalid frontend terminal tab.")
@@ -118,7 +118,7 @@ class FrontendTerminalHelper(
                         try {
                             sendDirectInput(view, focusComponent, payload, settleAtLineEnd)
                         } catch (exception: Throwable) {
-                            AiTerminalBridgeService.notify(project, "Failed to send AI Terminal input: ${exception.message}", NotificationType.WARNING)
+                            AiTerminalBridgeService.notify(project, "Failed to send input to AI Terminal: ${exception.message}", NotificationType.WARNING)
                         }
                     })
                     focusCallback.doWhenRejected(Runnable {
@@ -163,7 +163,7 @@ class FrontendTerminalHelper(
                         AiTerminalBridgeService.notify(project, "Cannot focus the AI terminal input component.", NotificationType.WARNING)
                     })
             } catch (exception: Throwable) {
-                AiTerminalBridgeService.notify(project, "Failed to send AI Terminal line-end spacing: ${exception.message}", NotificationType.WARNING)
+                AiTerminalBridgeService.notify(project, "Failed to send the AI Terminal line-ending space: ${exception.message}", NotificationType.WARNING)
             }
         }
         timer.isRepeats = false
@@ -211,7 +211,7 @@ class FrontendTerminalHelper(
         return view.javaClass.getMethod("getPreferredFocusableComponent").invoke(view) as? JComponent
     }
 
-    /** The Frontend Terminal API is still evolving, so all call sites go through reflection fallback here. */
+    /** The Frontend Terminal API is still changing; all calls are centralized here with reflection fallbacks. */
     private fun tabsManagerMethod(name: String, vararg parameterTypes: Class<*>?): java.lang.reflect.Method {
         return tabsManagerClass.getMethod(name, *parameterTypes)
     }

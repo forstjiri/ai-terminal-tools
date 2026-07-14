@@ -1,4 +1,4 @@
-// Dynamically registers context menu items after startup so they stay at the front and are not affected by load order
+// Dynamically registers context-menu items after startup so they stay first regardless of load order.
 package io.github.q110.aiterminaltools.bridge
 
 import com.intellij.openapi.actionSystem.ActionManager
@@ -10,7 +10,7 @@ import com.intellij.openapi.components.service
 import io.github.q110.aiterminaltools.console.AiConsoleErrorInlayService
 
 class AiTerminalToolsMenuRegistrar : StartupActivity, DumbAware {
-    /** Initialize runtime services at startup and insert dynamic actions into the IDE menus/toolbars. */
+    /** Initializes runtime services at startup and inserts dynamic actions into IDE menus/toolbars. */
     override fun runActivity(project: com.intellij.openapi.project.Project) {
         project.service<AiConsoleErrorInlayService>().initialize()
         project.service<AiTerminalDropService>().initialize()
@@ -28,7 +28,7 @@ class AiTerminalToolsMenuRegistrar : StartupActivity, DumbAware {
         registerToolbarAction(actionManager, "AiTerminalTools.StartClaudeCode")
     }
 
-    /** Insert the menu item at the front of the group using `Constraints.FIRST`. */
+    /** Inserts the action at the beginning of the menu group using Constraints.FIRST. */
     private fun registerMenuFirst(actionManager: ActionManager, menuId: String, actionId: String) {
         val group = actionManager.getAction(menuId) as? DefaultActionGroup ?: return
         val action = actionManager.getAction(actionId) ?: return
@@ -45,7 +45,7 @@ class AiTerminalToolsMenuRegistrar : StartupActivity, DumbAware {
         group.addAction(action, Constraints.LAST)
     }
 
-    /** Support both the new `MainToolbarRight` and the old `MainToolBar`. */
+    /** Supports both the newer MainToolbarRight and older MainToolBar. */
     private fun toolbarGroup(actionManager: ActionManager): DefaultActionGroup? {
         return actionManager.getAction("MainToolbarRight") as? DefaultActionGroup
             ?: actionManager.getAction("MainToolBar") as? DefaultActionGroup

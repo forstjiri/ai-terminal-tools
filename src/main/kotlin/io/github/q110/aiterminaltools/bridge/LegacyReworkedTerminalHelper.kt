@@ -1,4 +1,4 @@
-// Legacy Reworked Terminal compatibility layer - adapts the 2025.1/2025.2 terminal API via reflection
+// Legacy Reworked Terminal compatibility layer — adapts the 2025.1/2025.2 terminal API through reflection.
 package io.github.q110.aiterminaltools.bridge
 
 import com.intellij.notification.NotificationType
@@ -16,7 +16,7 @@ import javax.swing.Timer
 class LegacyReworkedTerminalHelper(
     private val project: Project
 ) {
-    /** Prefer the Reworked engine to avoid accidentally getting the Classic terminal implementation. */
+    /** Tries the Reworked engine first to avoid accidentally selecting the Classic implementation. */
     fun createAiTerminal(tabName: String, workingDirectory: String): TerminalWidget? {
         val manager = TerminalToolWindowManager.getInstance(project)
         val toolWindow = manager.toolWindow ?: return null
@@ -74,7 +74,7 @@ class LegacyReworkedTerminalHelper(
         return AiTerminalBridgeService.BridgeResult.Scheduled
     }
 
-    /** New and old Reworked APIs expose initialization size differently; if reflection fails, send the command directly. */
+    /** Reworked APIs expose initialization size differently; send the command directly if reflection fails. */
     private fun terminalSizeInitializedFuture(widget: TerminalWidget): CompletableFuture<*>? {
         return try {
             widget.javaClass.getMethod("getTerminalSizeInitializedFuture").invoke(widget) as? CompletableFuture<*>
@@ -92,7 +92,7 @@ class LegacyReworkedTerminalHelper(
             }
             AiTerminalBridgeService.BridgeResult.Success
         } catch (exception: Throwable) {
-            AiTerminalBridgeService.BridgeResult.Error("Failed to send AI Terminal input: ${exception.message}")
+            AiTerminalBridgeService.BridgeResult.Error("Failed to send input to AI Terminal: ${exception.message}")
         }
     }
 
@@ -295,7 +295,7 @@ class LegacyReworkedTerminalHelper(
             try {
                 writeLineEndSpace()
             } catch (exception: Throwable) {
-                AiTerminalBridgeService.notify(project, "Failed to send AI Terminal line-end spacing: ${exception.message}", NotificationType.WARNING)
+                AiTerminalBridgeService.notify(project, "Failed to send the AI Terminal line-ending space: ${exception.message}", NotificationType.WARNING)
             }
         }.apply {
             isRepeats = false

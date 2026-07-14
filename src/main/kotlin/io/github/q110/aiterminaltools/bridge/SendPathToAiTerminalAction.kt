@@ -1,4 +1,4 @@
-// "Send File/Folder Path to AI Terminal" action - sends paths from the project tree or editor tab context menu
+// "Send File/Folder Path to AI Terminal" action — sends a path from the project tree or editor tab context menu.
 package io.github.q110.aiterminaltools.bridge
 
 import com.intellij.notification.NotificationType
@@ -14,7 +14,7 @@ class SendPathToAiTerminalAction : DumbAwareAction() {
         return ActionUpdateThread.BGT
     }
 
-    /** Change the menu text dynamically based on whether the selection is a file or a folder. */
+    /** Updates the menu text according to whether the selection is a file or folder. */
     override fun update(event: AnActionEvent) {
         val project = event.project
         val selectedFiles = selectedVirtualFiles(event)
@@ -28,12 +28,12 @@ class SendPathToAiTerminalAction : DumbAwareAction() {
         event.presentation.isEnabledAndVisible = project != null && hasFile
     }
 
-    /** Send the path in `@path` format; `settleAtLineEnd=true` ends `@path` completion. */
+    /** Sends the path as @path, with settleAtLineEnd=true to finish @path completion. */
     override fun actionPerformed(event: AnActionEvent) {
         val project = event.project ?: return
         val virtualFile = selectedVirtualFiles(event).firstOrNull()
         if (virtualFile == null) {
-            AiTerminalBridgeService.notify(project, "Could not find a file or folder to send.", NotificationType.WARNING)
+            AiTerminalBridgeService.notify(project, "No file or folder to send was found.", NotificationType.WARNING)
             return
         }
 
@@ -53,7 +53,7 @@ class SendPathToAiTerminalAction : DumbAwareAction() {
         }
     }
 
-    /** Get the selected files: prefer VIRTUAL_FILE_ARRAY -> VIRTUAL_FILE. */
+    /** Gets selected files, preferring VIRTUAL_FILE_ARRAY over VIRTUAL_FILE. */
     private fun selectedVirtualFiles(event: AnActionEvent): List<VirtualFile> {
         val selectedFiles = event.getData(CommonDataKeys.VIRTUAL_FILE_ARRAY)
         if (!selectedFiles.isNullOrEmpty()) {

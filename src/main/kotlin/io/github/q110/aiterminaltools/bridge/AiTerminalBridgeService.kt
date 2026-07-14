@@ -1,4 +1,4 @@
-// AI Terminal 桥接核心服务 — 直接向当前激活的终端输入区写入内容
+// AI Terminal bridge service — writes directly to the active terminal input.
 package io.github.q110.aiterminaltools.bridge
 
 import com.intellij.notification.NotificationGroupManager
@@ -18,6 +18,7 @@ import com.intellij.ui.content.Content
 import com.intellij.terminal.JBTerminalWidget
 import com.intellij.terminal.ui.TerminalWidget
 import io.github.q110.aiterminaltools.filter.displayPath
+import io.github.q110.aiterminaltools.ProjectBasePath
 import io.github.q110.aiterminaltools.monitor.AiTerminalTabContext
 import io.github.q110.aiterminaltools.monitor.AiTool
 import io.github.q110.aiterminaltools.monitor.AiTurnEventServer
@@ -40,7 +41,7 @@ import javax.swing.Timer
 class AiTerminalBridgeService(
     private val project: Project
 ) {
-    /** 新版终端辅助类，仅在 2025.3+ IDE 中可加载，低版本为 null */
+    /** New terminal helper, loadable only in IDE 2025.3+; null on older versions. */
     private val frontendHelper: FrontendTerminalHelper? = try {
         FrontendTerminalHelper(project)
     } catch (_: Throwable) {
@@ -55,7 +56,7 @@ class AiTerminalBridgeService(
     private val aiLegacyReworkedTerminals = Collections.newSetFromMap(IdentityHashMap<TerminalWidget, Boolean>())
     private val aiClassicTerminals = Collections.newSetFromMap(IdentityHashMap<TerminalWidget, Boolean>())
 
-    /** 直接写入当前激活的 AI 终端输入区 */
+    /** Writes directly to the active AI terminal input. */
     fun sendDirectInput(payload: String, dataContext: DataContext, settleAtLineEnd: Boolean = false): BridgeResult {
         val terminal = resolveTargetTerminal(dataContext)
             ?: return BridgeResult.Error(NO_ACTIVE_TERMINAL_MESSAGE)
@@ -63,7 +64,7 @@ class AiTerminalBridgeService(
         return injectDirectInput(terminal, payload, settleAtLineEnd)
     }
 
-    /** 使用 bracketed paste 直接写入多行内容，避免换行被终端当作提交处理 */
+    /** Uses bracketed paste to write multiline content without treating newlines as submissions. */
     fun sendDirectPaste(payload: String, dataContext: DataContext): BridgeResult {
         val terminal = resolveTargetTerminal(dataContext)
             ?: return BridgeResult.Error(NO_ACTIVE_TERMINAL_MESSAGE)
@@ -71,12 +72,12 @@ class AiTerminalBridgeService(
         return injectDirectInput(terminal, bracketedPaste(payload), settleAtLineEnd = false)
     }
 
-    /** 拖拽路径合并为一次输入，避免多次触发造成卡顿 */
+    /** Combines dragged paths into one input to avoid lag from repeated events. */
     fun sendDroppedPaths(files: List<VirtualFile>): BridgeResult {
         val payload = files.filter { it.isValid }
             .joinToString(separator = " ") { pathPayload(it) }
         if (payload.isBlank()) {
-            return BridgeResult.Error("Could not find a file or folder to send.")
+            return BridgeResult.Error("No file or folder to send was found.")
         }
 
         val terminal = selectedTerminal()
@@ -113,26 +114,33 @@ class AiTerminalBridgeService(
         }
     }
 
-    /** 创建新的 OpenCode terminal，并启动 opencode */
-    fun startOpenCodeTerminal(): BridgeResult {
+    /** Creates a new OpenCode terminal and starts opencode. */
+    fun startOpenCodeTerminal(virtualFileHint: VirtualFile? = null): BridgeResult {
         if (!openCodeTerminalStartInProgress.compareAndSet(false, true)) {
             return BridgeResult.Scheduled
         }
-        scheduleOpenCodeTerminalStart()
+        scheduleOpenCodeTerminalStart(virtualFileHint)
         return BridgeResult.Scheduled
     }
 
-    /** 创建新的 Claude Code terminal，并启动 claude */
-    fun startClaudeCodeTerminal(): BridgeResult {
+    /** Creates a new Claude Code terminal and starts claude. */
+    fun startClaudeCodeTerminal(virtualFileHint: VirtualFile? = null): BridgeResult {
         if (!claudeCodeTerminalStartInProgress.compareAndSet(false, true)) {
             return BridgeResult.Scheduled
         }
-        scheduleClaudeCodeTerminalStart()
+        scheduleClaudeCodeTerminalStart(virtualFileHint)
         return BridgeResult.Scheduled
     }
 
-    private fun scheduleOpenCodeTerminalStart() {
-        // OpenCode：注入监控上下文，使用 launcher 脚本启动
+    private fun scheduleOpenCodeTerminalStart(virtualFileHint: VirtualFile?) {
+        val workingDirectory = try {
+            ProjectBasePath.resolveTerminalExecutionRoot(project, virtualFileHint)
+        } catch (exception: Throwable) {
+            openCodeTerminalStartInProgress.set(false)
+            notify(project, exception.message.orEmpty(), NotificationType.WARNING)
+            return
+        }
+        // OpenCode: inject monitoring context and start through the launcher script.
         val tabId = UUID.randomUUID().toString()
         val token = generateSecureToken()
 
@@ -141,13 +149,13 @@ class AiTerminalBridgeService(
         } catch (exception: Throwable) {
             log.error("Failed to start AiTurnEventServer", exception)
             openCodeTerminalStartInProgress.set(false)
-            notify(project, "Failed to start AI Turn Event Server: ${exception.message}", NotificationType.WARNING)
+            notify(project, "Failed to start the AI Turn Event Server: ${exception.message}", NotificationType.WARNING)
             return
         }
 
         val launcherCommand = try {
             val installer = AiTurnOpenCodeInstaller(project)
-            val launcherPaths = installer.installOpenCodePlugin(tabId, token, port)
+            val launcherPaths = installer.installOpenCodePlugin(workingDirectory, tabId, token, port)
             if (isWindows()) {
                 launcherPaths.cmdPath.toString()
             } else {
@@ -160,12 +168,11 @@ class AiTerminalBridgeService(
             return
         }
 
-        val workingDirectory = terminalWorkingDirectory()
         val tabContext = AiTerminalTabContext(
             tabId = tabId,
             token = token,
             tool = AiTool.OPENCODE,
-            workingDirectory = Path.of(workingDirectory),
+            workingDirectory = workingDirectory,
             createdAtMillis = System.currentTimeMillis()
         )
         project.service<AiTurnMonitorService>().registerTab(tabContext)
@@ -174,12 +181,22 @@ class AiTerminalBridgeService(
             tabName = nextTerminalTabName(OPEN_CODE_TAB_NAME),
             command = launcherCommand,
             toolName = OPEN_CODE_TAB_NAME,
-            inProgress = openCodeTerminalStartInProgress
+            inProgress = openCodeTerminalStartInProgress,
+            projectPath = workingDirectory,
+            tabId = tabId,
+            cleanup = { AiTurnOpenCodeInstaller(project).cleanupLauncherScripts(workingDirectory, tabId) }
         )
     }
 
-    private fun scheduleClaudeCodeTerminalStart() {
-        // Claude Code：注入监控上下文，使用 launcher 脚本启动
+    private fun scheduleClaudeCodeTerminalStart(virtualFileHint: VirtualFile?) {
+        val workingDirectory = try {
+            ProjectBasePath.resolveTerminalExecutionRoot(project, virtualFileHint)
+        } catch (exception: Throwable) {
+            claudeCodeTerminalStartInProgress.set(false)
+            notify(project, exception.message.orEmpty(), NotificationType.WARNING)
+            return
+        }
+        // Claude Code: inject monitoring context and start through the launcher script.
         val tabId = UUID.randomUUID().toString()
         val token = generateSecureToken()
 
@@ -188,13 +205,13 @@ class AiTerminalBridgeService(
         } catch (exception: Throwable) {
             log.error("Failed to start AiTurnEventServer", exception)
             claudeCodeTerminalStartInProgress.set(false)
-            notify(project, "Failed to start AI Turn Event Server: ${exception.message}", NotificationType.WARNING)
+            notify(project, "Failed to start the AI Turn Event Server: ${exception.message}", NotificationType.WARNING)
             return
         }
 
         val launcherCommand = try {
             val installer = AiTurnHookInstaller(project)
-            val launcherPaths = installer.installClaudeHooks(tabId, token, port)
+            val launcherPaths = installer.installClaudeHooks(workingDirectory, tabId, token, port)
             if (isWindows()) {
                 launcherPaths.cmdPath.toString()
             } else {
@@ -207,12 +224,11 @@ class AiTerminalBridgeService(
             return
         }
 
-        val workingDirectory = terminalWorkingDirectory()
         val tabContext = AiTerminalTabContext(
             tabId = tabId,
             token = token,
             tool = AiTool.CLAUDE_CODE,
-            workingDirectory = Path.of(workingDirectory),
+            workingDirectory = workingDirectory,
             createdAtMillis = System.currentTimeMillis()
         )
         project.service<AiTurnMonitorService>().registerTab(tabContext)
@@ -221,47 +237,90 @@ class AiTerminalBridgeService(
             tabName = nextTerminalTabName(CLAUDE_CODE_TAB_NAME),
             command = launcherCommand,
             toolName = CLAUDE_CODE_TAB_NAME,
-            inProgress = claudeCodeTerminalStartInProgress
+            inProgress = claudeCodeTerminalStartInProgress,
+            projectPath = workingDirectory,
+            tabId = tabId,
+            cleanup = { AiTurnHookInstaller(project).cleanupLauncherScripts(workingDirectory, tabId) }
         )
     }
 
-    private fun scheduleTerminalStart(tabName: String, command: String, toolName: String, inProgress: AtomicBoolean) {
+    private fun scheduleTerminalStart(
+        tabName: String, command: String, toolName: String, inProgress: AtomicBoolean,
+        projectPath: Path, tabId: String, cleanup: () -> Unit
+    ) {
         ApplicationManager.getApplication().invokeLater {
             if (project.isDisposed) {
+                failTerminalStart(tabId, cleanup, null)
                 inProgress.set(false)
                 return@invokeLater
             }
 
-            val terminalToolWindowManager = TerminalToolWindowManager.getInstance(project)
-            val toolWindow = terminalToolWindow(terminalToolWindowManager)
-            if (toolWindow == null) {
-                inProgress.set(false)
-                notify(project, "Terminal tool window was not found.", NotificationType.WARNING)
-                return@invokeLater
-            }
-
-            toolWindow.activate(Runnable {
-                ApplicationManager.getApplication().invokeLater {
-                    try {
-                        val workingDirectory = terminalWorkingDirectory()
-                        val result = startFrontendTerminal(tabName, workingDirectory, command, toolName)
-                            ?: if (shouldSkipLegacyReworkedTerminal(toolName)) {
-                                startClassicTerminal(tabName, workingDirectory, command, toolName)
-                            } else {
-                                startLegacyReworkedTerminal(tabName, workingDirectory, command, toolName)
-                                    ?: run {
-                                        notifyLegacyReworkedFallbackIfNeeded(toolName)
-                                        startClassicTerminal(tabName, workingDirectory, command, toolName)
-                                    }
-                            }
-                        if (result is BridgeResult.Error) {
-                            notify(project, result.message, NotificationType.WARNING)
-                        }
-                    } finally {
-                        inProgress.set(false)
-                    }
+            try {
+                val terminalToolWindowManager = TerminalToolWindowManager.getInstance(project)
+                val toolWindow = terminalToolWindow(terminalToolWindowManager)
+                if (toolWindow == null) {
+                    failTerminalStart(tabId, cleanup, "Terminal tool window was not found.")
+                    inProgress.set(false)
+                    return@invokeLater
                 }
-            }, true, true)
+
+                toolWindow.activate(Runnable {
+                    ApplicationManager.getApplication().invokeLater {
+                        try {
+                            val workingDirectory = try {
+                                ProjectBasePath.requireValid(projectPath)
+                            } catch (exception: Throwable) {
+                                failTerminalStart(
+                                    tabId,
+                                    cleanup,
+                                    "Could not start $toolName: ${exception.message}. Reopen the project or close the stale project."
+                                )
+                                return@invokeLater
+                            }
+                            val workingDirectoryString = workingDirectory.toString()
+                            val result = startFrontendTerminal(tabName, workingDirectoryString, command, toolName)
+                                ?: if (shouldSkipLegacyReworkedTerminal(toolName)) {
+                                    startClassicTerminal(tabName, workingDirectoryString, command, toolName)
+                                } else {
+                                    startLegacyReworkedTerminal(tabName, workingDirectoryString, command, toolName)
+                                        ?: run {
+                                            notifyLegacyReworkedFallbackIfNeeded(toolName)
+                                            startClassicTerminal(tabName, workingDirectoryString, command, toolName)
+                                        }
+                                }
+                            if (result is BridgeResult.Error) {
+                                failTerminalStart(tabId, cleanup, result.message)
+                            }
+                        } catch (exception: Throwable) {
+                            failTerminalStart(tabId, cleanup, "Could not start $toolName: ${exception.message}")
+                        } finally {
+                            inProgress.set(false)
+                        }
+                    }
+                }, true, true)
+            } catch (exception: Throwable) {
+                failTerminalStart(tabId, cleanup, "Could not start $toolName: ${exception.message}")
+                inProgress.set(false)
+            }
+        }
+    }
+
+    private fun failTerminalStart(tabId: String, cleanup: () -> Unit, message: String?) {
+        try {
+            cleanup()
+        } catch (_: Throwable) {
+        }
+        if (!project.isDisposed) {
+            try {
+                project.service<AiTurnMonitorService>().unregisterTab(tabId)
+            } catch (_: Throwable) {
+            }
+            if (message != null) {
+                try {
+                    notify(project, message, NotificationType.WARNING)
+                } catch (_: Throwable) {
+                }
+            }
         }
     }
 
@@ -276,7 +335,7 @@ class AiTerminalBridgeService(
             helper.runCommand(
                 tab,
                 command,
-                "Started $toolName terminal",
+                "$toolName terminal started",
                 "Failed to start $toolName"
             ) {
                 registerAiTerminal(TargetTerminal.Frontend(tab))
@@ -294,7 +353,7 @@ class AiTerminalBridgeService(
             legacyReworkedTerminalHelper.runCommand(
                 widget = widget,
                 command = command,
-                successMessage = "Started $toolName terminal",
+                successMessage = "$toolName terminal started",
                 failurePrefix = "Failed to run $command",
                 onCommandSent = {
                     registerAiTerminal(TargetTerminal.LegacyReworked(widget))
@@ -333,7 +392,7 @@ class AiTerminalBridgeService(
             try {
                 ShellTerminalWidget.toShellJediTermWidgetOrThrow(widget).executeCommand(command)
                 registerAiTerminal(TargetTerminal.Classic(widget))
-                notify(project, "Started $toolName terminal", NotificationType.INFORMATION)
+                notify(project, "$toolName terminal started", NotificationType.INFORMATION)
             } catch (exception: Throwable) {
                 notify(project, "Failed to run $command: ${exception.message}", NotificationType.WARNING)
             }
@@ -347,10 +406,6 @@ class AiTerminalBridgeService(
 
     private fun bracketedPaste(payload: String): String {
         return BRACKETED_PASTE_START + payload + BRACKETED_PASTE_END
-    }
-
-    private fun terminalWorkingDirectory(): String {
-        return project.basePath ?: System.getProperty("user.home")
     }
 
     private fun nextTerminalTabName(baseName: String): String {
@@ -391,12 +446,12 @@ class AiTerminalBridgeService(
         when (ideBaselineVersion()) {
             251 -> notify(
                 project,
-                "Start $toolName using Classic Terminal.",
+                "Started $toolName using Classic Terminal.",
                 NotificationType.WARNING
             )
             252 -> notify(
                 project,
-                "Start $toolName using Classic Terminal.",
+                "Started $toolName using Classic Terminal.",
                 NotificationType.WARNING
             )
         }
@@ -416,7 +471,7 @@ class AiTerminalBridgeService(
             )
             is TargetTerminal.Frontend -> {
                 val helper = frontendHelper
-                    ?: return BridgeResult.Error("The new terminal API is unavailable in the current IDE.")
+                    ?: return BridgeResult.Error("The new terminal API is unavailable in this IDE.")
                 helper.injectDirectInput(terminal.tab, payload, settleAtLineEnd)
             }
         }
@@ -470,16 +525,16 @@ class AiTerminalBridgeService(
         }
     }
 
-    /** 通过 TTY Connector 直接向经典终端写入文本 */
+    /** Writes text directly to a Classic Terminal through its TTY connector. */
     private fun injectClassicDirectInput(terminal: TerminalWidget, payload: String, settleAtLineEnd: Boolean): BridgeResult {
         val connector = try {
             terminal.ttyConnector
         } catch (_: Throwable) {
-            return BridgeResult.Error("The current Terminal does not expose a writable TTY connector.")
-        } ?: return BridgeResult.Error("The current Terminal does not expose a writable TTY connector.")
+            return BridgeResult.Error("The current Terminal does not expose a writable TTY connection.")
+        } ?: return BridgeResult.Error("The current Terminal does not expose a writable TTY connection.")
 
         if (!connector.isConnected) {
-            return BridgeResult.Error("The currently active Terminal is disconnected.")
+            return BridgeResult.Error("The active Terminal is disconnected.")
         }
 
         return try {
@@ -490,17 +545,17 @@ class AiTerminalBridgeService(
             }
             BridgeResult.Success
         } catch (exception: IOException) {
-            BridgeResult.Error("Failed to send AI Terminal input: ${exception.message}")
+            BridgeResult.Error("Failed to send input to AI Terminal: ${exception.message}")
         }
     }
 
-    /** 经典终端上行尾空格延时 300ms（等待终端处理完输入） */
+    /** Delays the Classic Terminal line-ending space by 300 ms while it processes the input. */
     private fun scheduleClassicLineEndSpace(writeLineEndSpace: () -> Unit) {
         Timer(SETTLE_INPUT_DELAY_MS) {
             try {
                 writeLineEndSpace()
             } catch (exception: Throwable) {
-                notify(project, "Failed to send AI Terminal line-end spacing: ${exception.message}", NotificationType.WARNING)
+                notify(project, "Failed to send the AI Terminal line-ending space: ${exception.message}", NotificationType.WARNING)
             }
         }.apply {
             isRepeats = false
@@ -508,7 +563,7 @@ class AiTerminalBridgeService(
         }
     }
 
-    /** 终端发现优先级：DataContext → 当前选中终端 */
+    /** Terminal lookup priority: DataContext, then the currently selected terminal. */
     private fun resolveTargetTerminal(dataContext: DataContext): TargetTerminal? {
         classicTerminalFromDataContext(dataContext)?.let {
             val target = TargetTerminal.Classic(it)
@@ -521,7 +576,7 @@ class AiTerminalBridgeService(
         return JBTerminalWidget.TERMINAL_DATA_KEY.getData(dataContext)?.asNewWidget()
     }
 
-    /** 优先前端终端 → 经典终端 */
+    /** Prefer the frontend terminal, then the Classic Terminal. */
     private fun selectedTerminal(): TargetTerminal? {
         return frontendHelper?.selectedTerminal()?.let { TargetTerminal.Frontend(it) }
             ?: selectedClassicOrLegacyTerminal()
@@ -538,7 +593,7 @@ class AiTerminalBridgeService(
         }
     }
 
-    /** 检查终端是否可用：经典终端检查 TTY 连接，前端终端检查 tab 仍存在 */
+    /** Checks terminal availability: TTY connection for Classic, tab existence for frontend terminals. */
     private fun isUsable(terminal: TargetTerminal): Boolean {
         return when (terminal) {
             is TargetTerminal.Classic -> {
@@ -567,7 +622,7 @@ class AiTerminalBridgeService(
         private const val NOTIFICATION_GROUP_ID = "AI Terminal Tools"
         private const val OPEN_CODE_TAB_NAME = "OpenCode"
         private const val CLAUDE_CODE_TAB_NAME = "Claude Code"
-        private const val NO_ACTIVE_TERMINAL_MESSAGE = "Please start and activate an OpenCode or Claude Code terminal first."
+        private const val NO_ACTIVE_TERMINAL_MESSAGE = "Start and activate an OpenCode or Claude Code terminal first."
         private const val LINE_END_SPACE = "\u0005 "
         private const val BRACKETED_PASTE_START = "\u001B[200~"
         private const val BRACKETED_PASTE_END = "\u001B[201~"
@@ -585,14 +640,14 @@ class AiTerminalBridgeService(
         }
     }
 
-    /** 发送结果类型 */
+    /** Result types for send operations. */
     sealed class BridgeResult {
         data object Success : BridgeResult()
         data object Scheduled : BridgeResult()
         data class Error(val message: String) : BridgeResult()
     }
 
-    /** 终端类型抽象：经典 / 前端（tab 在运行时为 TerminalToolWindowTab 类型） */
+    /** Terminal abstraction: Classic or frontend (the tab is a TerminalToolWindowTab at runtime). */
     private sealed class TargetTerminal {
         data class Classic(val widget: TerminalWidget) : TargetTerminal()
         data class LegacyReworked(val widget: TerminalWidget) : TargetTerminal()
