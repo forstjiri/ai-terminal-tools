@@ -34,7 +34,8 @@ import javax.swing.JPanel
  */
 class AiTurnDiffDialog(
     project: Project,
-    private val requests: List<DiffRequest>
+    private val requests: List<DiffRequest>,
+    private val onClosed: (() -> Unit)? = null
 ) {
     private val disposable = Disposer.newDisposable().also {
         Disposer.register(project, it)
@@ -53,6 +54,7 @@ class AiTurnDiffDialog(
         addWindowListener(object : WindowAdapter() {
             override fun windowClosed(e: WindowEvent) {
                 Disposer.dispose(disposable)
+                onClosed?.invoke()
             }
         })
     }

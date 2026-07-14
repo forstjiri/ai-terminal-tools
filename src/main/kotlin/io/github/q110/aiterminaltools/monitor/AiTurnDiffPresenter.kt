@@ -2,6 +2,7 @@
 package io.github.q110.aiterminaltools.monitor
 
 import com.intellij.diff.DiffContentFactory
+import com.intellij.diff.util.DiffUserDataKeys
 import com.intellij.diff.requests.SimpleDiffRequest
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
@@ -10,6 +11,8 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
+import io.github.q110.aiterminaltools.bridge.AiTerminalBridgeService
+import io.github.q110.aiterminaltools.settings.AiTerminalToolsSettings
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -19,15 +22,12 @@ class AiTurnDiffPresenter(
 ) {
     private val log = Logger.getInstance(AiTurnDiffPresenter::class.java)
 
-    /** Most recently completed turn state, used by "Show Last AI Turn Diff" */
     @Volatile
     var lastTurn: AiTurnState? = null
         private set
 
-    /**
-     * Display Diffs for all files modified in the specified turn.
-     * Open a multi-file Diff window through IntelliJ DiffManager on the EDT.
-     */
+    private var pendingAfterContents: Map<Path, String> = emptyMap()
+
     fun showDiff(turn: AiTurnState) {
         if (turn.changedFiles.isEmpty()) {
             return
@@ -36,14 +36,17 @@ class AiTurnDiffPresenter(
         ApplicationManager.getApplication().invokeLater {
             if (project.isDisposed) return@invokeLater
 
-            val requests = buildRequests(turn)
+            val result = buildRequests(turn)
+            val requests = result.requests
+            val afterContents = result.afterContents
             if (requests.isEmpty()) {
                 return@invokeLater
             }
 
             try {
                 lastTurn = turn
-                AiTurnDiffDialog(project, requests).show()
+                pendingAfterContents = afterContents
+                AiTurnDiffDialog(project, requests) { handleDiffClosed(afterContents) }.show()
             } catch (exception: Throwable) {
                 log.error("Failed to show diff", exception)
                 notify("Failed to open the Diff window: ${exception.message}", NotificationType.WARNING)
@@ -51,7 +54,6 @@ class AiTurnDiffPresenter(
         }
     }
 
-    /** Reopen the last Diff */
     fun showLastDiff() {
         val turn = lastTurn
         if (turn == null) {
@@ -61,10 +63,67 @@ class AiTurnDiffPresenter(
         showDiff(turn)
     }
 
-    private fun buildRequests(turn: AiTurnState): List<SimpleDiffRequest> {
+    private fun handleDiffClosed(afterContents: Map<Path, String>) {
+        val settings = AiTerminalToolsSettings.getInstance().getState()
+        if (!settings.appendChangesToNextMessage) return
+
+        val projectBasePath = project.basePath?.let { Path.of(it).normalize() }
+
+        val revertedDiffs = StringBuilder()
+        var revertedFileCount = 0
+
+        for ((path, afterText) in afterContents) {
+            val currentText = try {
+                if (Files.exists(path)) Files.readString(path) else null
+            } catch (_: Throwable) {
+                null
+            }
+
+            if (currentText == null) continue
+            if (currentText == afterText) continue
+
+            val displayPath = projectBasePath
+                ?.let { base -> runCatching { base.relativize(path).toString() }.getOrNull() }
+                ?: path.toString()
+
+            val diff = generateUnifiedDiff(displayPath, afterText, currentText)
+            if (diff.isNotEmpty()) {
+                if (revertedFileCount > 0) revertedDiffs.append("\n")
+                revertedDiffs.append(diff)
+                revertedFileCount++
+            }
+        }
+
+        if (revertedFileCount == 0) return
+
+        val payload = buildString {
+            append("Lines reverted by user\n")
+            append("-------\n")
+            append(revertedDiffs)
+            append("-------\n")
+            append("The user reverted changes shown above in the diff window. Respect these reversions in your next response.")
+        }
+
+        try {
+            val result = AiTerminalBridgeService.getInstance(project).sendDirectPasteToSelectedAiTerminal(payload)
+            if (result is AiTerminalBridgeService.BridgeResult.Error) {
+                log.warn("Failed to inject revert context: ${result.message}")
+            }
+        } catch (e: Throwable) {
+            log.warn("Failed to inject revert context", e)
+        }
+    }
+
+    private data class BuildResult(
+        val requests: List<SimpleDiffRequest>,
+        val afterContents: Map<Path, String>
+    )
+
+    private fun buildRequests(turn: AiTurnState): BuildResult {
         val contentFactory = DiffContentFactory.getInstance()
         val projectBasePath = project.basePath?.let { Path.of(it).normalize() }
         var skippedBinaryCount = 0
+        val afterContents = linkedMapOf<Path, String>()
 
         val requests = turn.changedFiles.mapNotNull { path ->
             val oldSnapshot = turn.beforeSnapshots[path] ?: FileSnapshot.Missing
@@ -72,7 +131,6 @@ class AiTurnDiffPresenter(
                 return@mapNotNull null
             }
 
-            // Skip binary files
             if (oldSnapshot is FileSnapshot.Binary) {
                 skippedBinaryCount++
                 return@mapNotNull null
@@ -85,7 +143,6 @@ class AiTurnDiffPresenter(
                         return@mapNotNull null
                     }
                 } catch (_: Throwable) {
-                    // Continue trying if reading fails
                 }
             }
 
@@ -107,10 +164,16 @@ class AiTurnDiffPresenter(
                     }
                 }
                 is FileSnapshot.Binary -> {
-                    // Already skipped; this point is unreachable
                     return@mapNotNull null
                 }
             }
+
+            val currentText = try {
+                if (Files.exists(path)) Files.readString(path) else ""
+            } catch (_: Throwable) {
+                ""
+            }
+            afterContents[path] = currentText
 
             val newContent = try {
                 if (Files.exists(path)) {
@@ -137,14 +200,16 @@ class AiTurnDiffPresenter(
                 newContent,
                 "Before AI turn",
                 "After AI turn"
-            )
+            ).apply {
+                putUserData(DiffUserDataKeys.FORCE_READ_ONLY_CONTENTS, booleanArrayOf(true, false))
+            }
         }
 
         if (skippedBinaryCount > 0) {
             notify("Skipped $skippedBinaryCount binary files.", NotificationType.INFORMATION)
         }
 
-        return requests
+        return BuildResult(requests, afterContents)
     }
 
     private fun hasContentChange(path: Path, oldSnapshot: FileSnapshot): Boolean {
@@ -164,6 +229,32 @@ class AiTurnDiffPresenter(
                 }
             }
             is FileSnapshot.Binary -> true
+        }
+    }
+
+    private fun generateUnifiedDiff(displayPath: String, oldText: String, newText: String): String {
+        val oldFile = Files.createTempFile("aitt-old", ".txt")
+        val newFile = Files.createTempFile("aitt-new", ".txt")
+        return try {
+            Files.writeString(oldFile, oldText)
+            Files.writeString(newFile, newText)
+            val process = ProcessBuilder(
+                "diff", "-u",
+                "--label", "a/$displayPath",
+                "--label", "b/$displayPath",
+                oldFile.toString(), newFile.toString()
+            )
+                .redirectErrorStream(true)
+                .start()
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            process.waitFor()
+            output
+        } catch (e: Throwable) {
+            log.warn("Failed to generate unified diff for $displayPath", e)
+            ""
+        } finally {
+            Files.deleteIfExists(oldFile)
+            Files.deleteIfExists(newFile)
         }
     }
 

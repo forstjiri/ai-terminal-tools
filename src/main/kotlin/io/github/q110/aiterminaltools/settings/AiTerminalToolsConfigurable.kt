@@ -31,6 +31,7 @@ class AiTerminalToolsConfigurable : Configurable {
     private var openCodeTerminalCommandField: JBTextField? = null
     private var claudeCodeTerminalCommandField: JBTextField? = null
     private var onTurnEndCommandField: JBTextField? = null
+    private var appendChangesToNextMessageCheckBox: JBCheckBox? = null
     private var panel: JPanel? = null
     private var selectedCommitMessageAiTool: String = COMMIT_MESSAGE_AI_TOOL_OPENCODE
     private var openCodeCommitMessageModel: String = ""
@@ -60,6 +61,7 @@ class AiTerminalToolsConfigurable : Configurable {
         val openCodeTerminalCommandField = JBTextField()
         val claudeCodeTerminalCommandField = JBTextField()
         val onTurnEndCommandField = JBTextField()
+        val appendChangesToNextMessageCheckBox = JBCheckBox("Append changes made in diff window to next agent message")
         val defaultFileExtensionsArea = JBTextArea(
             AiTerminalToolsSettings.StateData.DEFAULT_FILE_EXTENSIONS.joinToString(", ")
         )
@@ -167,6 +169,10 @@ class AiTerminalToolsConfigurable : Configurable {
         panel.add(onTurnEndCommandField, constraints)
 
         constraints.gridy = 21
+        constraints.insets = JBUI.insetsTop(16)
+        panel.add(appendChangesToNextMessageCheckBox, constraints)
+
+        constraints.gridy = 22
         constraints.weighty = 1.0
         constraints.fill = GridBagConstraints.BOTH
         panel.add(JPanel(), constraints)
@@ -193,6 +199,7 @@ class AiTerminalToolsConfigurable : Configurable {
         this.openCodeTerminalCommandField = openCodeTerminalCommandField
         this.claudeCodeTerminalCommandField = claudeCodeTerminalCommandField
         this.onTurnEndCommandField = onTurnEndCommandField
+        this.appendChangesToNextMessageCheckBox = appendChangesToNextMessageCheckBox
         this.panel = panel
         return panel
     }
@@ -222,7 +229,8 @@ class AiTerminalToolsConfigurable : Configurable {
             commitMessageAdditionalPromptArea?.text?.trim() != settings.commitMessageAdditionalPrompt ||
             openCodeTerminalCommandField?.text?.trim() != settings.openCodeTerminalCommand ||
             claudeCodeTerminalCommandField?.text?.trim() != settings.claudeCodeTerminalCommand ||
-            onTurnEndCommandField?.text?.trim() != settings.onTurnEndCommand
+            onTurnEndCommandField?.text?.trim() != settings.onTurnEndCommand ||
+            appendChangesToNextMessageCheckBox?.isSelected != settings.appendChangesToNextMessage
     }
 
     /** Write the current UI state to persistent settings. */
@@ -241,6 +249,7 @@ class AiTerminalToolsConfigurable : Configurable {
         settings.openCodeTerminalCommand = openCodeTerminalCommandField?.text?.trim().orEmpty()
         settings.claudeCodeTerminalCommand = claudeCodeTerminalCommandField?.text?.trim().orEmpty()
         settings.onTurnEndCommand = onTurnEndCommandField?.text?.trim().orEmpty()
+        settings.appendChangesToNextMessage = appendChangesToNextMessageCheckBox?.isSelected == true
     }
 
     /** Restore the UI from persistent settings without triggering a second model write. */
@@ -258,6 +267,7 @@ class AiTerminalToolsConfigurable : Configurable {
         openCodeTerminalCommandField?.text = settings.openCodeTerminalCommand
         claudeCodeTerminalCommandField?.text = settings.claudeCodeTerminalCommand
         onTurnEndCommandField?.text = settings.onTurnEndCommand
+        appendChangesToNextMessageCheckBox?.isSelected = settings.appendChangesToNextMessage
         updatingCommitMessageUi = true
         commitMessageAiToolCombo?.selectedItem = commitMessageAiToolLabel(selectedCommitMessageAiTool)
         updatingCommitMessageUi = false
@@ -276,6 +286,7 @@ class AiTerminalToolsConfigurable : Configurable {
         openCodeTerminalCommandField = null
         claudeCodeTerminalCommandField = null
         onTurnEndCommandField = null
+        appendChangesToNextMessageCheckBox = null
         panel = null
     }
 

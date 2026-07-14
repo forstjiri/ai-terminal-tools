@@ -35,6 +35,7 @@ class AiTerminalToolsSettings : PersistentStateComponent<AiTerminalToolsSettings
         var openCodeTerminalCommand: String = ""
         var claudeCodeTerminalCommand: String = ""
         var onTurnEndCommand: String = ""
+        var appendChangesToNextMessage: Boolean = true
         var commitMessageAdditionalPrompt: String = ""
         var additionalFileExtensions: String = ""
 

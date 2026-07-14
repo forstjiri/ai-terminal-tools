@@ -1,6 +1,9 @@
 // Sends the diagnostic message under the caret to the selected AI terminal.
 package io.github.q110.aiterminaltools.bridge
 
+import com.intellij.icons.AllIcons
+import com.intellij.openapi.util.Iconable
+import javax.swing.Icon
 import com.intellij.codeInsight.daemon.impl.DaemonCodeAnalyzerEx
 import com.intellij.codeInsight.intention.IntentionAction
 import com.intellij.lang.annotation.HighlightSeverity
@@ -11,10 +14,12 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiFile
 import io.github.q110.aiterminaltools.filter.displayPath
 
-class SendDiagnosticToAiTerminalAction : IntentionAction, DumbAware {
+class SendDiagnosticToAiTerminalAction : IntentionAction, DumbAware, Iconable {
     override fun getText(): String = "Send Diagnostic to AI Terminal"
 
     override fun getFamilyName(): String = "AI Terminal Tools"
+
+    override fun getIcon(flags: Int): Icon = AllIcons.Debugger.Console
 
     override fun startInWriteAction(): Boolean = false
 
