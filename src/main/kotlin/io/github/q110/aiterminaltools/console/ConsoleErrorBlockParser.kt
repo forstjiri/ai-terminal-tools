@@ -1,4 +1,4 @@
-// Console error block parser - extracts contiguous error fragments from Run/Debug output for AI sending
+// Console error-block parser — extracts contiguous error fragments from Run/Debug output for sending to AI
 package io.github.q110.aiterminaltools.console
 
 import com.intellij.openapi.editor.Document
@@ -12,7 +12,7 @@ internal data class ConsoleErrorBlock(
 )
 
 internal object ConsoleErrorBlockParser {
-    /** Error block start patterns cover common JVM, Python, Node, TypeScript, Go, Rust, Ruby, and C/C++ output. */
+    /** Error-block start patterns cover common JVM, Python, Node, TypeScript, Go, Rust, Ruby, and C/C++ output */
     private val pythonTracebackHeaderPattern = Regex("""^\s*Traceback\s*\(\s*most\s+recent\s+call\s+last\s*\)\s*:$""")
     private val pythonExceptionChainPattern = Regex("""^\s*(?:During handling of the above exception, another exception occurred:|The above exception was the direct cause of the following exception:)\s*$""")
     private val pythonExceptionSummaryPattern = Regex("""^\s*[A-Za-z_]\w*(?:Error|Exception|Warning|Interrupt)(?:\s*:\s*.*)?$""")
@@ -59,7 +59,7 @@ internal object ConsoleErrorBlockParser {
         Regex("""^\s*\[(?:INFO|WARN|Process\s+exited).*$""")
     )
 
-    /** Scan the document line by line and merge the error headline with following stack trace / diagnostic context into a sendable block. */
+    /** Scan the document line by line and combine error headers with stack traces/diagnostic context */
     fun parse(document: Document): List<ConsoleErrorBlock> {
         val blocks = mutableListOf<ConsoleErrorBlock>()
         var currentStartLine: Int? = null

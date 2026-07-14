@@ -1,4 +1,4 @@
-// File snapshot service - stores file contents before modifications
+// File snapshot service — saves file contents before modification
 package io.github.q110.aiterminaltools.monitor
 
 import com.intellij.openapi.components.Service
@@ -16,8 +16,8 @@ class AiTurnSnapshotService(
     private val log = Logger.getInstance(AiTurnSnapshotService::class.java)
 
     /**
-     * Save the pre-change snapshot before a file is modified.
-     * For the same path, only the first snapshot is kept and later changes do not overwrite it.
+     * Save a snapshot of the old contents before a file is modified.
+     * Save only the first snapshot for each path; later modifications do not overwrite it.
      */
     fun captureBeforeIfAbsent(turn: AiTurnState, path: Path) {
         if (turn.beforeSnapshots.containsKey(path)) return
@@ -61,7 +61,7 @@ class AiTurnSnapshotService(
     }
 
     private fun isBinary(bytes: ByteArray): Boolean {
-        // Check the first 8000 bytes for a NUL character, which indicates a binary file.
+        // Check the first 8000 bytes for a NUL character (a binary-file characteristic)
         val checkLength = minOf(bytes.size, 8000)
         for (i in 0 until checkLength) {
             if (bytes[i] == 0.toByte()) return true
@@ -99,7 +99,7 @@ class AiTurnSnapshotService(
     }
 
     companion object {
-        /** Maximum snapshot size per file: 2 MB */
+        /** Maximum single-file snapshot size: 2 MB */
         const val MAX_FILE_SIZE_BYTES = 2L * 1024 * 1024
     }
 }

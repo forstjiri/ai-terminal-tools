@@ -1,4 +1,4 @@
-// Path utility functions - VirtualFile lookup, normalization, and matching
+// Path utilities — VirtualFile lookup, normalization, and matching
 package io.github.q110.aiterminaltools.filter
 
 import com.intellij.openapi.project.Project
@@ -7,7 +7,7 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 
-/** Convert a VirtualFile to a display path relative to the project (project base path -> content root -> absolute path). */
+/** Convert a VirtualFile to a project-relative display path (project base → content root → absolute path) */
 internal fun displayPath(project: Project, file: VirtualFile): String {
     val projectBasePath = project.basePath
     if (projectBasePath != null) {
@@ -29,14 +29,14 @@ internal fun displayPath(project: Project, file: VirtualFile): String {
     return file.path
 }
 
-/** Check whether a file path ends with the given suffix after normalizing both sides. */
+/** Check whether a file path ends with the given path suffix (compare after normalization) */
 internal fun pathMatches(project: Project, file: VirtualFile, path: String): Boolean {
     val normalizedPath = normalizePath(path)
     return normalizePath(displayPath(project, file)).endsWith(normalizedPath) ||
         normalizePath(file.path).endsWith(normalizedPath)
 }
 
-/** Find the VirtualFile for a string path in the project (project roots -> content roots). */
+/** Find the VirtualFile for a string path in the project (project root → content roots) */
 internal fun findProjectPath(project: Project, path: String): VirtualFile? {
     val normalizedPath = normalizePath(path).trimStart('/')
     val roots = mutableListOf<VirtualFile>()
@@ -52,27 +52,27 @@ internal fun findProjectPath(project: Project, path: String): VirtualFile? {
         .firstOrNull()
 }
 
-/** Check whether a reference string contains a path separator. */
+/** Check whether a reference string contains a path separator */
 internal fun isPathReference(reference: String): Boolean {
     return reference.contains('/')
 }
 
-/** Check whether two ranges overlap, used to deduplicate fileLinks and copyLinks. */
+/** Check whether two ranges overlap (for deduplicating fileLinks and copyLinks) */
 internal fun rangesOverlap(range: IntRange, ranges: List<IntRange>): Boolean {
     return ranges.any { range.first <= it.last && range.last >= it.first }
 }
 
-/** Filter out meaningless symbol-only text (only _, -, ., / and no digits). */
+/** Filter meaningless symbol-only text (only _ - . / and no digits) */
 internal fun isCopyNoise(text: String): Boolean {
     return text.all { it == '_' || it == '-' || it == '.' || it == '/' || it.isDigit() } && text.none { it.isDigit() }
 }
 
-/** Truncate long text for notification display. */
+/** Truncate long text for notification display */
 internal fun shortStatusText(text: String): String {
     return if (text.length > 80) text.take(77) + "..." else text
 }
 
-/** Normalize a path: use forward slashes, trim spaces, and strip trailing punctuation. */
+/** Normalize paths: unify slashes and remove whitespace and trailing punctuation */
 internal fun normalizePath(path: String): String {
     return path.replace('\\', '/').trim().trimEnd('.', ',', ';', ':', ')', ']', '}')
 }

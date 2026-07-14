@@ -1,4 +1,4 @@
-// Standalone JFrame window for AI Turn Diff, preserving native window buttons and following the IDE theme.
+// Standalone JFrame window for AI Turn Diff, retaining native window buttons and following the IDE theme.
 package io.github.q110.aiterminaltools.monitor
 
 import com.intellij.diff.DiffManager
@@ -27,10 +27,10 @@ import javax.swing.JFrame
 import javax.swing.JPanel
 
 /**
- * Show the current AI changes in a standalone [JFrame].
+ * Display this turn's AI changes in a standalone [JFrame].
  *
- * [JFrame] is used to preserve the native Windows maximize/minimize buttons; the content is still
- * rendered by the IntelliJ Diff API. The top bar shows the number of changed files and a file picker.
+ * [JFrame] preserves native Windows maximize/minimize buttons; the content is still rendered
+ * by the IntelliJ Diff API. The header shows the number of changed files and a file selector.
  */
 class AiTurnDiffDialog(
     project: Project,
@@ -42,7 +42,7 @@ class AiTurnDiffDialog(
 
     private val parentFrame = WindowManager.getInstance().getFrame(project)
     private val frame = JFrame().apply {
-        title = "AI Terminal Changes - ${requests.size} files"
+        title = "AI Terminal changes this turn - ${requests.size} files"
         iconImage = parentFrame?.iconImage
         isResizable = true
         defaultCloseOperation = JFrame.DISPOSE_ON_CLOSE
@@ -59,7 +59,7 @@ class AiTurnDiffDialog(
     private val diffPanel = DiffManager.getInstance().createRequestPanel(project, disposable, frame)
     private val fileComboBox = ComboBox(requests.map { it.title }.toTypedArray()).apply {
         isEnabled = requests.size > 1
-        toolTipText = "Select a file changed in this turn"
+        toolTipText = "Select a file changed this turn"
     }
 
     private var currentIndex = 0
@@ -94,7 +94,7 @@ class AiTurnDiffDialog(
             background = UIUtil.getPanelBackground()
             border = JBUI.Borders.empty(8, 10)
         }
-        val countLabel = JBLabel("This turn changed ${requests.size} file(s)").apply {
+        val countLabel = JBLabel("Changes this turn: ${requests.size} files").apply {
             foreground = UIUtil.getLabelForeground()
             border = JBUI.Borders.emptyRight(10)
         }
@@ -116,7 +116,7 @@ class AiTurnDiffDialog(
         return header
     }
 
-    // ---- Windows title bar theme ----
+    // ---- Windows title-bar theme ----
 
     private fun applyTitleBarTheme(window: Window) {
         if (!SystemInfo.isWin10OrNewer) return
@@ -138,11 +138,11 @@ class AiTurnDiffDialog(
                 )
             }
         } catch (_: Throwable) {
-            // Use the system default title bar when not on Windows or when JNA/DWM is unavailable.
+            // Use the system default title bar when not on Windows or JNA/DWM is unavailable.
         }
     }
 
-    /** JNA mapping for `dwmapi.dll`'s `DwmSetWindowAttribute`. */
+    /** JNA mapping for DwmSetWindowAttribute in dwmapi.dll. */
     private interface DwmApi : Library {
         companion object {
             val INSTANCE: DwmApi = Native.load("dwmapi", DwmApi::class.java)

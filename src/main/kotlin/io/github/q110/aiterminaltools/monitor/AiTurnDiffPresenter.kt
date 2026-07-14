@@ -1,4 +1,4 @@
-// Diff presenter - opens a multi-file Diff window using the IntelliJ native Diff API
+// Diff presenter — uses the native IntelliJ Diff API to open a multi-file Diff window
 package io.github.q110.aiterminaltools.monitor
 
 import com.intellij.diff.DiffContentFactory
@@ -19,14 +19,14 @@ class AiTurnDiffPresenter(
 ) {
     private val log = Logger.getInstance(AiTurnDiffPresenter::class.java)
 
-    /** The most recent completed turn state, used by "Show Last AI Turn Diff". */
+    /** Most recently completed turn state, used by "Show Last AI Turn Diff" */
     @Volatile
     var lastTurn: AiTurnState? = null
         private set
 
     /**
-     * Show the Diff for all modified files in the given turn.
-     * This opens a multi-file Diff window on the EDT via IntelliJ DiffManager.
+     * Display Diffs for all files modified in the specified turn.
+     * Open a multi-file Diff window through IntelliJ DiffManager on the EDT.
      */
     fun showDiff(turn: AiTurnState) {
         if (turn.changedFiles.isEmpty()) {
@@ -51,11 +51,11 @@ class AiTurnDiffPresenter(
         }
     }
 
-    /** Reopen the last Diff. */
+    /** Reopen the last Diff */
     fun showLastDiff() {
         val turn = lastTurn
         if (turn == null) {
-            notify("No AI Turn Diff records are available.", NotificationType.INFORMATION)
+            notify("No AI Turn Diff record is available to display.", NotificationType.INFORMATION)
             return
         }
         showDiff(turn)
@@ -72,7 +72,7 @@ class AiTurnDiffPresenter(
                 return@mapNotNull null
             }
 
-            // Skip binary files.
+            // Skip binary files
             if (oldSnapshot is FileSnapshot.Binary) {
                 skippedBinaryCount++
                 return@mapNotNull null
@@ -85,7 +85,7 @@ class AiTurnDiffPresenter(
                         return@mapNotNull null
                     }
                 } catch (_: Throwable) {
-                    // If reading fails, keep trying.
+                    // Continue trying if reading fails
                 }
             }
 
@@ -107,7 +107,7 @@ class AiTurnDiffPresenter(
                     }
                 }
                 is FileSnapshot.Binary -> {
-                    // Already skipped, so this branch should not be reached.
+                    // Already skipped; this point is unreachable
                     return@mapNotNull null
                 }
             }
@@ -132,7 +132,7 @@ class AiTurnDiffPresenter(
                 ?: path.toString()
 
             SimpleDiffRequest(
-                "AI Terminal Changes: $displayPath",
+                "AI Terminal change: $displayPath",
                 oldContent,
                 newContent,
                 "Before AI turn",
@@ -141,7 +141,7 @@ class AiTurnDiffPresenter(
         }
 
         if (skippedBinaryCount > 0) {
-            notify("Skipped $skippedBinaryCount binary file(s).", NotificationType.INFORMATION)
+            notify("Skipped $skippedBinaryCount binary files.", NotificationType.INFORMATION)
         }
 
         return requests

@@ -1,4 +1,4 @@
-// File jump hyperlink handler - automatically chooses the best file and jumps to the requested line when clicked
+// File navigation link handler — automatically chooses the best file and jumps to the specified line
 package io.github.q110.aiterminaltools.jump
 
 import com.intellij.execution.filters.HyperlinkInfo
@@ -14,19 +14,19 @@ import io.github.q110.aiterminaltools.filter.pathMatches
 
 internal class FileReferenceHyperlinkInfo(
     private val project: Project,
-    /** Candidate files with the same name (sorted by display path). */
+    /** Same-name file candidates (sorted by display path) */
     private val files: List<VirtualFile>,
     private val fileName: String,
-    /** Path context contained in the current line. */
+    /** Path context contained in the current line */
     private val requestedPath: String?,
     private val hasLineNumber: Boolean,
     private val lineNumber: Int,
-    /** Optional end line for a range. */
+    /** Optional end of the line range */
     private val endLineNumber: Int?,
-    /** Recent path cache indexed by file name. */
+    /** Recent path cache (indexed by filename) */
     private val recentFilePathsByName: Map<String, String>
 ) : HyperlinkInfo {
-    /** Open the file, select the line range, and scroll it to center. */
+    /** Open the file, select the line range, and center the view */
     override fun navigate(project: Project) {
         val target = chooseBestFile() ?: chooseFile()
         if (target != null) {
@@ -57,22 +57,22 @@ internal class FileReferenceHyperlinkInfo(
         }
     }
 
-    /** Smartly choose the best file from the candidates. */
+    /** Intelligently choose the best file from the candidates */
     private fun chooseBestFile(): VirtualFile? {
         if (files.size == 1) return files.first()
 
-        // Prefer an exact match by path suffix.
+        // Prefer an exact path-suffix match
         if (requestedPath != null) {
             findByPathSuffix(requestedPath)?.let { return it }
         }
 
-        // Next try the most recently seen path.
+        // Then match a recently seen path
         val recentPath = recentFilePathsByName[fileName]
         if (recentPath != null) {
             findByPathSuffix(recentPath)?.let { return it }
         }
 
-        // Finally, choose by weighted scoring.
+        // Finally choose by weighted score
         val scoredFiles = files.groupBy { scoreFile(it) }
         val bestScore = scoredFiles.keys.maxOrNull() ?: return null
         val bestFiles = scoredFiles[bestScore].orEmpty()
@@ -85,7 +85,7 @@ internal class FileReferenceHyperlinkInfo(
         }
     }
 
-    /** Score with IntelliJ project indexes: source root +100, test root -60, excluded dir -200, library file -100, exact filename suffix +10. */
+    /** Score using the IntelliJ project index: source root +100, test root -60, excluded -200, library -100, exact filename suffix +10 */
     private fun scoreFile(file: VirtualFile): Int {
         val fileIndex = ProjectFileIndex.getInstance(project)
         var score = 0
@@ -98,7 +98,7 @@ internal class FileReferenceHyperlinkInfo(
         return score
     }
 
-    /** Show the file selection dialog if automatic selection fails. */
+    /** Show a file chooser when automatic selection fails */
     private fun chooseFile(): VirtualFile? {
         val dialog = FileChoiceDialog(project, files)
         return if (dialog.showAndGet()) dialog.selectedFile else null

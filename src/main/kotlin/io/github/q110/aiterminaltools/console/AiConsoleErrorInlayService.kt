@@ -1,4 +1,4 @@
-// Console error inlay service - shows a send-to-AI Terminal icon next to the error headline
+// Console error inlay service — shows an icon beside error headers to send them to AI Terminal
 package io.github.q110.aiterminaltools.console
 
 import com.intellij.ide.DataManager
@@ -43,7 +43,7 @@ class AiConsoleErrorInlayService(
     private var previousToolTipText: String? = null
 
     init {
-        // Console output keeps appending, so rescan changes with a delay to coalesce the same batch of output.
+        // Console output is appended continuously; defer rescanning on document changes to combine one batch.
         editorFactory.eventMulticaster.addDocumentListener(object : DocumentListener {
             override fun documentChanged(event: DocumentEvent) {
                 scheduleRescan(event.document)
@@ -67,7 +67,7 @@ class AiConsoleErrorInlayService(
         }, this)
     }
 
-    /** Rescan existing console editors after project startup. */
+    /** Rescan console editors that already exist after project startup */
     fun initialize() {
         editorFactory.allEditors
             .filter { isProjectConsoleEditor(it) }
@@ -86,7 +86,7 @@ class AiConsoleErrorInlayService(
         }
     }
 
-    /** Add or remove inlays based on parsed error blocks to avoid duplicate icons on the same line. */
+    /** Add/remove inlays from parsed error blocks without creating duplicate icons on one line */
     private fun rescan(document: Document) {
         val editors = projectConsoleEditors(document)
         if (editors.isEmpty()) {
@@ -133,7 +133,7 @@ class AiConsoleErrorInlayService(
         }
     }
 
-    /** When the icon is clicked, send only the current error block instead of the entire console output. */
+    /** Send only the current error block when its icon is clicked, not the entire console output */
     private fun sendErrorToAiTerminal(editor: Editor, rangeMarker: RangeMarker) {
         if (!rangeMarker.isValid) {
             AiTerminalBridgeService.notify(project, "The console error is no longer available.", NotificationType.WARNING)
@@ -153,7 +153,7 @@ class AiConsoleErrorInlayService(
         val dataContext = DataManager.getInstance().getDataContext(editor.component)
         when (val result = AiTerminalBridgeService.getInstance(project).sendDirectPaste(payload, dataContext)) {
             is AiTerminalBridgeService.BridgeResult.Success -> {
-                AiTerminalBridgeService.notify(project, "Sent console error to AI Terminal", NotificationType.INFORMATION)
+                AiTerminalBridgeService.notify(project, "Console error sent to AI Terminal", NotificationType.INFORMATION)
             }
             is AiTerminalBridgeService.BridgeResult.Scheduled -> {
             }

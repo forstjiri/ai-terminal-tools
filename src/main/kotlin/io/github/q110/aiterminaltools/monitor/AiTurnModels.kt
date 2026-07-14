@@ -4,13 +4,13 @@ package io.github.q110.aiterminaltools.monitor
 import java.nio.charset.Charset
 import java.nio.file.Path
 
-/** AI terminal tool type. */
+/** AI terminal tool type */
 enum class AiTool {
     OPENCODE,
     CLAUDE_CODE
 }
 
-/** Turn event type. */
+/** Turn event type */
 enum class AiTurnEventType {
     TURN_START,
     BEFORE_WRITE,
@@ -19,7 +19,7 @@ enum class AiTurnEventType {
     TURN_END_FAILED
 }
 
-/** Event received from the HTTP endpoint. */
+/** Event received from the HTTP endpoint */
 data class AiTurnEvent(
     val source: AiTool,
     val type: AiTurnEventType,
@@ -30,7 +30,7 @@ data class AiTurnEvent(
     val rawJson: String
 )
 
-/** State of one conversation turn. */
+/** State of one conversation turn */
 data class AiTurnState(
     val turnId: String,
     val tabId: String,
@@ -42,19 +42,19 @@ data class AiTurnState(
     val changedFiles: LinkedHashSet<Path> = linkedSetOf()
 )
 
-/** Snapshot taken before a file modification. */
+/** Snapshot taken before a file modification */
 sealed interface FileSnapshot {
-    /** File does not exist (new file case). */
+    /** File does not exist (new-file case) */
     data object Missing : FileSnapshot
 
-    /** Text file snapshot. */
+    /** Text-file snapshot */
     data class Text(
         val text: String,
         val charset: Charset,
         val fileTypeName: String?
     ) : FileSnapshot
 
-    /** Binary file snapshot. */
+    /** Binary-file snapshot */
     data class Binary(
         val bytes: ByteArray,
         val fileTypeName: String?
@@ -71,7 +71,7 @@ sealed interface FileSnapshot {
     }
 }
 
-/** Context for a registered AI terminal tab. */
+/** Context for a registered AI terminal tab */
 data class AiTerminalTabContext(
     val tabId: String,
     val token: String,
@@ -79,7 +79,7 @@ data class AiTerminalTabContext(
     val workingDirectory: Path,
     val createdAtMillis: Long
 ) {
-    /** Validate the event token: allow events without a token, otherwise require a match. */
+    /** Validate the event token: allow a missing token; otherwise it must match */
     fun accepts(event: AiTurnEvent): Boolean {
         return event.token == null || event.token == token
     }

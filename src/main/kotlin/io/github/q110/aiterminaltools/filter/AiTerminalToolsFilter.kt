@@ -1,4 +1,4 @@
-// 核心 Filter — 解析终端每一行输出，生成文件跳转链接和点击复制链接
+// Core Filter — parses each terminal output line into file navigation and click-to-copy links
 package io.github.q110.aiterminaltools.filter
 
 import com.intellij.execution.filters.Filter
@@ -20,20 +20,20 @@ import io.github.q110.aiterminaltools.settings.AiTerminalToolsSettings
 internal class AiTerminalToolsFilter(
     private val project: Project
 ) : Filter {
-    /** LRU 缓存：文件名 → 最近出现的路径 */
+    /** LRU cache: filename → most recently seen path */
     private val recentFilePathsByName = LinkedHashMap<String, String>()
     private var cachedFileExtensions: Set<String> = emptySet()
     private var cachedFileRefPattern: Regex =
         FilterPatterns.fileRefPattern(AiTerminalToolsSettings.StateData.DEFAULT_FILE_EXTENSIONS)
 
-    /** @param line 当前输出行文本，entireLength 整段内容总长度（用于计算 baseOffset） */
+    /** @param line current output line; entireLength is the total content length (for calculating baseOffset) */
     override fun applyFilter(line: String, entireLength: Int): Filter.Result? {
         val settings = AiTerminalToolsSettings.getInstance().getState()
         if (!settings.fileLinksEnabled && !settings.copyLinksEnabled) {
             return null
         }
 
-        // 阶段一：缓存当前行中的文件路径引用
+        // Stage one: cache file path references in the current line
         if (settings.fileLinksEnabled) {
             val fileRefPattern = currentFileRefPattern(settings.resolvedFileExtensions())
             rememberPathReferences(line, fileRefPattern)
@@ -44,7 +44,7 @@ internal class AiTerminalToolsFilter(
         val fileLinkRanges = mutableListOf<IntRange>()
         val copyTextAttributes = normalTextAttributes()
 
-        // 阶段二：解析 @路径引用（高优先级，精确匹配）
+        // Stage two: parse @path references (high priority, exact matches)
         if (settings.fileLinksEnabled) {
             for (match in FilterPatterns.atPathRefPattern.findAll(line)) {
                 val reference = normalizePath(match.groupValues[1])
@@ -78,7 +78,7 @@ internal class AiTerminalToolsFilter(
                 }
             }
 
-            // 阶段三：解析常规文件引用（按文件名索引，可能多匹配）
+            // Stage three: parse regular file references (filename-indexed, possibly multiple matches)
             val fileRefPattern = currentFileRefPattern(settings.resolvedFileExtensions())
             for (match in fileRefPattern.findAll(line)) {
                 if (rangesOverlap(match.range, fileLinkRanges)) continue
@@ -110,8 +110,8 @@ internal class AiTerminalToolsFilter(
             }
         }
 
-        // 阶段四：解析点击复制模式（跳过已被文件链接占用的区间）
-        // Classic 终端中不通过 Filter 生成复制链接，由 DropService 的 MouseAdapter 处理以避免样式异常
+        // Stage four: parse click-to-copy patterns (skip ranges occupied by file links)
+        // Classic terminals create copy links through DropService's MouseAdapter instead of Filter to avoid styling issues
         if (settings.copyLinksEnabled && isInTerminalToolWindow() && !isCurrentTerminalClassic()) {
             for (match in findCopyMatches(line, fileLinkRanges)) {
                 items += Filter.ResultItem(
@@ -127,7 +127,7 @@ internal class AiTerminalToolsFilter(
         return if (items.isEmpty()) null else Filter.Result(items)
     }
 
-    /** 复用已编译正则，仅在设置中的扩展名集合变化时刷新。 */
+    /** Reuse the compiled regex and refresh it only when configured extensions change. */
     private fun currentFileRefPattern(extensions: Set<String>): Regex {
         if (extensions != cachedFileExtensions) {
             cachedFileExtensions = extensions
@@ -152,20 +152,20 @@ private fun normalTextAttributes(): TextAttributes {
         return project.getUserData(KEY_CURRENT_TERMINAL_CLASSIC) == true
     }
 
-    /** 判断当前控制台视图是否为终端工具窗口（非 Run/Debug 等控制台） */
+    /** Check whether the current console view is the Terminal tool window (not a Run/Debug console) */
     private fun isInTerminalToolWindow(): Boolean {
         val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Terminal")
         return toolWindow?.isVisible == true
     }
 
-    /** 在 ReadAction 中按路径查找 VirtualFile */
+    /** Find a VirtualFile by path inside a ReadAction */
     private fun findProjectPathReference(path: String): VirtualFile? {
         return ReadAction.compute<VirtualFile?, RuntimeException> {
             findProjectPath(project, path)
         }
     }
 
-    /** 在 ReadAction 中按文件名查找项目文件，可选的路径过滤 */
+    /** Find project files by filename inside a ReadAction, with optional path filtering */
     private fun findProjectFiles(fileName: String, requestedPath: String?): List<VirtualFile> {
         return ReadAction.compute<List<VirtualFile>, RuntimeException> {
             val files = FilenameIndex
@@ -177,7 +177,7 @@ private fun normalTextAttributes(): TextAttributes {
         }
     }
 
-    /** 缓存当前行中的路径到 LRU map，供后续同名文件消除歧义 */
+    /** Cache current-line paths in the LRU map to disambiguate later same-name files */
     private fun rememberPathReferences(line: String, fileRefPattern: Regex) {
         for (match in fileRefPattern.findAll(line)) {
             val path = normalizePath(match.groupValues[1])
@@ -193,7 +193,7 @@ private fun normalTextAttributes(): TextAttributes {
         }
     }
 
-    /** 扫描 copyPatterns，按优先级匹配并跳过已占用的区间 */
+    /** Scan copyPatterns by priority and skip occupied ranges */
     private fun findCopyMatches(line: String, blockedRanges: List<IntRange>): List<CopyMatch> {
         val usedRanges = blockedRanges.toMutableList()
         val matches = mutableListOf<CopyMatch>()
@@ -214,7 +214,7 @@ private fun normalTextAttributes(): TextAttributes {
     }
 
     companion object {
-        /** DropService 设置此 Key，Filter 读取以跳过 Classic 终端中的复制链接生成 */
+        /** DropService sets this Key; Filter reads it to skip copy-link generation in Classic terminals */
         val KEY_CURRENT_TERMINAL_CLASSIC = Key.create<Boolean>("ai-terminal-tools.currentTerminalClassic")
     }
 }

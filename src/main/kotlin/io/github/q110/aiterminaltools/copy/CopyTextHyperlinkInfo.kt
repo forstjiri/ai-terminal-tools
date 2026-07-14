@@ -1,4 +1,4 @@
-// Click-to-copy hyperlink handler - copies the matched text to the clipboard and shows a "Copied" hint
+// Click-to-copy link handler — copies matched text to the clipboard and shows a "Copied" prompt
 package io.github.q110.aiterminaltools.copy
 
 import com.intellij.execution.filters.HyperlinkInfoBase
@@ -20,7 +20,7 @@ internal class CopyTextHyperlinkInfo(
     private val project: Project,
     private val text: String
 ) : HyperlinkInfoBase() {
-    /** Copy the text and show a balloon hint above the link for 700ms. */
+    /** Copy the text and show a Balloon prompt above the link for 700 ms */
     override fun navigate(project: Project, hyperlinkLocationPoint: RelativePoint?) {
         CopyPasteManager.copyTextToClipboard(text)
         if (hyperlinkLocationPoint == null) {

@@ -7,7 +7,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.components.service
 
 class ShowLastAiTurnDiffAction : AnAction() {
-    /** Enable this action only when the project has a most recent Diff state. */
+    /** Enable this menu action only when the project has a recent Diff state */
     override fun getActionUpdateThread(): ActionUpdateThread {
         return ActionUpdateThread.EDT
     }

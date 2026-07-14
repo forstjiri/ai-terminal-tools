@@ -1,4 +1,4 @@
-// Folder jump hyperlink handler - selects and expands the folder in Project View when clicked
+// Folder navigation link handler — locates and expands the folder in Project View when clicked
 package io.github.q110.aiterminaltools.jump
 
 import com.intellij.execution.filters.HyperlinkInfo
@@ -11,7 +11,7 @@ internal class FolderReferenceHyperlinkInfo(
     private val folder: VirtualFile
 ) : HyperlinkInfo {
     override fun navigate(project: Project) {
-        // Use the constructor project so navigation always happens in the project that created the link.
+        // Use the constructor's project so navigation always targets the project for which the link was created.
         ProjectView.getInstance(this.project).select(null, folder, true)
     }
 }

@@ -1,4 +1,4 @@
-// ConsoleFilterProvider implementation - registers the core filter for consoles/terminals
+// ConsoleFilterProvider implementation — registers the core Filter for consoles/terminals
 package io.github.q110.aiterminaltools.filter
 
 import com.intellij.execution.filters.ConsoleFilterProvider
@@ -6,7 +6,7 @@ import com.intellij.execution.filters.Filter
 import com.intellij.openapi.project.Project
 
 class AiTerminalToolsFilterProvider : ConsoleFilterProvider {
-    /** Create a separate filter for each project so file paths can be resolved with the project index. */
+    /** Create an independent Filter per project for project-indexed path parsing */
     override fun getDefaultFilters(project: Project): Array<Filter> {
         return arrayOf(AiTerminalToolsFilter(project))
     }

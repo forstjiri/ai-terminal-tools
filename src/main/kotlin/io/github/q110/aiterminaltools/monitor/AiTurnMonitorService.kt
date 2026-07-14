@@ -1,4 +1,4 @@
-// Turn state machine - tracks each round of AI file modifications by terminal tab and upstream session
+// Turn state machine — tracks each turn's AI file changes by terminal tab and upstream session
 package io.github.q110.aiterminaltools.monitor
 
 import com.intellij.openapi.components.Service
@@ -21,7 +21,7 @@ class AiTurnMonitorService(
     private val tabs = ConcurrentHashMap<String, AiTerminalTabContext>()
     private val turns = ConcurrentHashMap<String, AiTurnState>()
 
-    /** Register an AI terminal started by the plugin; later HTTP events must match tabId/token. */
+    /** Register an AI terminal started by the plugin; subsequent HTTP events must match tabId/token */
     fun registerTab(context: AiTerminalTabContext) {
         tabs[context.tabId] = context
         log.info("Registered AI terminal tab: ${context.tabId} (${context.tool})")
@@ -36,12 +36,12 @@ class AiTurnMonitorService(
         }
     }
 
-    /** Expose the current active turns for downstream VFS fallback listeners. */
+    /** Allow a later VFS fallback listener to read the active turns */
     fun activeTurns(): List<AiTurnState> {
         return turns.values.toList()
     }
 
-    /** Handle standardized events returned by Claude hooks / the OpenCode plugin. */
+    /** Handle normalized events sent by Claude hooks / the OpenCode plugin */
     fun handle(event: AiTurnEvent) {
         val tab = tabs[event.tabId]
         if (tab == null) {
@@ -70,13 +70,13 @@ class AiTurnMonitorService(
                 return
             }
 
-            // The same OpenCode session may send busy repeatedly, so do not end the current turn early.
+            // The same OpenCode session may send busy repeatedly; do not end the current turn early.
             if (isSameKnownOpenCodeSession(tab, existing, event)) {
                 log.debug("Duplicate turn_start for OpenCode tab ${tab.tabId}, turn ${existing.turnId} continues")
                 return
             }
 
-            // Claude should normally end via Stop; if the previous turn is still open when a new one starts, finish the old one first.
+            // Claude normally ends with Stop; finish the previous turn if a new one starts first.
             log.info("Previous turn ${existing.turnId} for tab ${tab.tabId} not finished, auto-finishing")
             turns.remove(tab.tabId, existing)
             if (existing.changedFiles.isNotEmpty()) {
@@ -138,7 +138,7 @@ class AiTurnMonitorService(
         if (tab.tool != AiTool.OPENCODE) return false
         val eventSessionId = event.sessionId
         if (turn.upstreamSessionId.isNullOrBlank() && !eventSessionId.isNullOrBlank()) {
-            // `file_changed` / `before_write` may arrive before busy, so use the write event to fill in the sessionID.
+            // file_changed/before_write may arrive before busy; use the write event to fill in sessionID.
             turns[tab.tabId] = turn.copy(upstreamSessionId = eventSessionId)
             log.debug("Attached OpenCode session $eventSessionId to turn ${turn.turnId}")
             return true
@@ -168,7 +168,7 @@ class AiTurnMonitorService(
     }
 
     private fun markChangedPaths(turn: AiTurnState, event: AiTurnEvent) {
-        // Use event paths when available; otherwise fall back to the set of paths captured for this turn.
+        // Use event paths when available; otherwise fall back to paths with snapshots saved this turn.
         val paths = if (event.paths.isNotEmpty()) {
             event.paths.mapNotNull { normalizePath(turn.cwd, it) }
         } else {
@@ -196,7 +196,7 @@ class AiTurnMonitorService(
         }
 
         if (tab.tool == AiTool.OPENCODE && !canFinishOpenCodeTurn(turn, event)) {
-            // A late `session.idle` cannot end an active turn from a later session.
+            // A late session.idle must not end an active turn from a later session.
             log.debug(
                 "Ignoring turn_end for OpenCode session ${event.sessionId}; " +
                     "active turn ${turn.turnId} belongs to ${turn.upstreamSessionId}"
@@ -242,7 +242,7 @@ class AiTurnMonitorService(
 
     private fun refreshAndShowDiff(turn: AiTurnState) {
         try {
-            // After an external CLI modifies files, refresh the VFS first so the Diff reads the latest content.
+            // Refresh VFS after external CLI changes so the Diff reads the latest contents.
             val files = turn.changedFiles.map { it.toFile() }
             LocalFileSystem.getInstance().refreshIoFiles(files, false, true, null)
         } catch (exception: Throwable) {
@@ -269,7 +269,7 @@ class AiTurnMonitorService(
         val absolute = if (path.isAbsolute) path else cwd.resolve(path)
         val normalized = absolute.normalize()
 
-        // Events are only allowed to reference files inside the project to avoid local HTTP access to out-of-project paths.
+        // Events may reference only project files, preventing local HTTP events from reading outside the project.
         val projectBase = project.basePath?.let { Path.of(it).normalize() } ?: return null
         if (!normalized.startsWith(projectBase)) {
             log.debug("Path $normalized is outside project base $projectBase, ignoring")

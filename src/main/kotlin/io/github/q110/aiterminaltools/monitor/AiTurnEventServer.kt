@@ -1,4 +1,4 @@
-// Local HTTP event server - receives event callbacks from Claude hooks / the OpenCode plugin
+// Local HTTP event service — receives callbacks from Claude hooks / OpenCode plugins
 package io.github.q110.aiterminaltools.monitor
 
 import com.intellij.openapi.Disposable
@@ -21,7 +21,7 @@ class AiTurnEventServer(
     private var server: HttpServer? = null
     private var port: Int = -1
 
-    /** Ensure the HTTP service is running and return the listening port. */
+    /** Ensure the HTTP service is started and return its listening port */
     @Synchronized
     fun ensureStarted(): Int {
         if (server != null) return port
@@ -46,13 +46,13 @@ class AiTurnEventServer(
 
     private fun handleEvent(exchange: HttpExchange) {
         try {
-            // Accept POST only.
+            // Accept POST only
             if (exchange.requestMethod != "POST") {
                 exchange.sendResponseHeaders(405, -1)
                 return
             }
 
-            // Enforce the Content-Length upper bound (2 MB).
+            // Check the Content-Length limit (2 MB)
             val contentLength = exchange.requestHeaders.getFirst("Content-Length")?.toLongOrNull() ?: 0
             if (contentLength > MAX_BODY_SIZE) {
                 log.warn("Request body too large: $contentLength bytes")
@@ -84,7 +84,7 @@ class AiTurnEventServer(
             try {
                 exchange.sendResponseHeaders(500, -1)
             } catch (_: Throwable) {
-                // 忽略
+                // Ignore
             }
         } finally {
             exchange.close()
@@ -92,8 +92,8 @@ class AiTurnEventServer(
     }
 
     /**
-     * Parse the JSON body into an `AiTurnEvent`.
-     * Uses a simple manual JSON parser to avoid adding third-party dependencies such as Gson/Jackson.
+     * Parse the JSON body into an AiTurnEvent.
+     * Use simple manual JSON parsing to avoid third-party dependencies such as Gson/Jackson.
      */
     private fun parseEvent(body: String, headerToken: String?): AiTurnEvent? {
         val source = extractJsonString(body, "source") ?: return null
@@ -129,9 +129,9 @@ class AiTurnEventServer(
         )
     }
 
-    /** Extract a string value for the given key from a JSON string (simple implementation). */
+    /** Extract the string value for a key from a JSON string (simple implementation) */
     private fun extractJsonString(json: String, key: String): String? {
-        // Match `"key": "value"` or `"key":"value"`.
+        // Match "key": "value" or "key":"value"
         val pattern = Regex(""""${Regex.escape(key)}"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"""")
         return pattern.find(json)?.groupValues?.get(1)
             ?.replace("\\\"", "\"")
@@ -142,9 +142,9 @@ class AiTurnEventServer(
             ?.replace("\\t", "\t")
     }
 
-    /** Extract a string array value for the given key from a JSON string. */
+    /** Extract the string-array value for a key from a JSON string */
     private fun extractJsonStringArray(json: String, key: String): List<String> {
-        // Match `"key": [...]` or `"key":[...]`.
+        // Match "key": [...] or "key":[...]
         val arrayPattern = Regex(""""${Regex.escape(key)}"\s*:\s*\[([^\]]*)]""")
         val arrayContent = arrayPattern.find(json)?.groupValues?.get(1) ?: return emptyList()
 

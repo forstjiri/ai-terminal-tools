@@ -1,4 +1,4 @@
-// Same-name file selection dialog - lets the user choose manually when multiple files match
+// Same-name file chooser — lets the user choose when multiple files match
 package io.github.q110.aiterminaltools.jump
 
 import com.intellij.openapi.project.Project
@@ -20,10 +20,10 @@ internal class FileChoiceDialog(
     private val project: Project,
     private val files: List<VirtualFile>
 ) : DialogWrapper(project) {
-    // Show relative/friendly paths in the list so users can distinguish same-named files.
+    // Show relative/friendly paths so the user can distinguish same-name files.
     private val list = JBList(files.map { displayPath(project, it) })
 
-    // The raw file for the currently selected entry; returns null if there is no valid selection.
+    // Original file for the selected item; return null when there is no valid selection.
     val selectedFile: VirtualFile?
         get() = files.getOrNull(list.selectedIndex)
 
@@ -36,13 +36,13 @@ internal class FileChoiceDialog(
 
     override fun createCenterPanel(): JComponent {
         val panel = JPanel(BorderLayout())
-        panel.add(JLabel("Multiple files with the same name were found. Select the file you want to jump to."), BorderLayout.NORTH)
+        panel.add(JLabel("Multiple files with the same name were found. Select the file to open."), BorderLayout.NORTH)
         panel.add(JBScrollPane(list), BorderLayout.CENTER)
         panel.preferredSize = dialogSize(project)
         return panel
     }
 
-    // Prefer the current window size, then fall back to the screen size, to avoid dialogs that are too large or too small.
+    // Prefer the current window size, then fall back to the screen size to avoid an overly large or small dialog.
     private fun dialogSize(project: Project): Dimension {
         val windowSize = WindowManager.getInstance().getFrame(project)?.size
             ?: Toolkit.getDefaultToolkit().screenSize
