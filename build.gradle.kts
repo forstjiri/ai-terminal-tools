@@ -1,13 +1,23 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.gradle.api.tasks.compile.JavaCompile
+
 plugins {
     id("org.jetbrains.kotlin.jvm") version "2.2.21"
     id("org.jetbrains.intellij.platform") version "2.12.0"
 }
 
 group = "io.github.q110"
-version = "0.1.3"
+version = "0.2.0"
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(25)
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.release.set(17)
 }
 
 repositories {
