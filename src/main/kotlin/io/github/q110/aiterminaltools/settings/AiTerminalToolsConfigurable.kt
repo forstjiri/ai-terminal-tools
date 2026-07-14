@@ -2,8 +2,6 @@
 package io.github.q110.aiterminaltools.settings
 
 import com.intellij.openapi.options.Configurable
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.ui.ComboBox
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBCheckBox
@@ -13,8 +11,6 @@ import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.JBUI
 import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
-import java.awt.FlowLayout
-import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JLabel
 import javax.swing.JPanel
@@ -24,8 +20,8 @@ class AiTerminalToolsConfigurable : Configurable {
     private var copyLinksCheckBox: JBCheckBox? = null
     private var errorToAiTerminalIconsCheckBox: JBCheckBox? = null
     private var dragToAiTerminalCheckBox: JBCheckBox? = null
-    private var commitMessageAiToolCombo: ComboBox<String>? = null
-    private var commitMessageModelCombo: ComboBox<String>? = null
+    private var commitMessageAiToolCombo: javax.swing.JComboBox<String>? = null
+    private var commitMessageModelField: JBTextField? = null
     private var commitMessageAdditionalPromptArea: JBTextArea? = null
     private var openCodeTerminalCommandField: JBTextField? = null
     private var claudeCodeTerminalCommandField: JBTextField? = null
@@ -42,19 +38,12 @@ class AiTerminalToolsConfigurable : Configurable {
     }
 
     override fun createComponent(): JComponent {
-        // Store commit message models separately for each AI tool before switching the dropdown.
         val fileLinksCheckBox = JBCheckBox("Enable file navigation links")
         val copyLinksCheckBox = JBCheckBox("Enable click-to-copy links")
         val errorToAiTerminalIconsCheckBox = JBCheckBox("Enable console error send icons")
         val dragToAiTerminalCheckBox = JBCheckBox("Enable dragging files/folders to AI terminals")
-        val commitMessageAiToolCombo = ComboBox(arrayOf(COMMIT_MESSAGE_AI_TOOL_OPENCODE_LABEL, COMMIT_MESSAGE_AI_TOOL_CLAUDE_LABEL))
-        val commitMessageModelCombo = ComboBox<String>()
-        commitMessageModelCombo.isEditable = true
-        val refreshModelsButton = JButton("Refresh")
-        refreshModelsButton.toolTipText = "Refresh models from OpenCode"
-        val commitMessageModelPanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0))
-        commitMessageModelPanel.add(commitMessageModelCombo)
-        commitMessageModelPanel.add(refreshModelsButton)
+        val commitMessageAiToolCombo = javax.swing.JComboBox(arrayOf(COMMIT_MESSAGE_AI_TOOL_OPENCODE_LABEL, COMMIT_MESSAGE_AI_TOOL_CLAUDE_LABEL))
+        val commitMessageModelField = JBTextField()
         val commitMessageAdditionalPromptArea = JBTextArea(4, 48)
         val openCodeTerminalCommandField = JBTextField()
         val claudeCodeTerminalCommandField = JBTextField()
@@ -103,47 +92,54 @@ class AiTerminalToolsConfigurable : Configurable {
 
         constraints.gridy = 8
         constraints.insets = JBUI.insetsTop(4)
-        panel.add(commitMessageModelPanel, constraints)
+        panel.add(commitMessageModelField, constraints)
 
         constraints.gridy = 9
+        constraints.insets = JBUI.insetsTop(4)
+        val modelHelpLabel = JBLabel("Use full model name with provider prefix, e.g. openai/gpt-5.6-luna")
+        modelHelpLabel.foreground = JBColor.namedColor("Label.disabledForeground", JBColor(0x8c8c8c, 0x999999))
+        modelHelpLabel.border = JBUI.Borders.emptyLeft(20)
+        panel.add(modelHelpLabel, constraints)
+
+        constraints.gridy = 10
         constraints.insets = JBUI.insetsTop(16)
         panel.add(JLabel("Additional commit message prompt:"), constraints)
 
-        constraints.gridy = 10
+        constraints.gridy = 11
         constraints.insets = JBUI.insetsTop(4)
         commitMessageAdditionalPromptArea.lineWrap = true
         commitMessageAdditionalPromptArea.wrapStyleWord = true
         panel.add(JBScrollPane(commitMessageAdditionalPromptArea), constraints)
 
-        constraints.gridy = 11
+        constraints.gridy = 12
         constraints.insets = JBUI.insetsTop(16)
         panel.add(JLabel("OpenCode startup command:"), constraints)
 
-        constraints.gridy = 12
+        constraints.gridy = 13
         constraints.insets = JBUI.insetsTop(4)
         panel.add(openCodeTerminalCommandField, constraints)
 
-        constraints.gridy = 13
+        constraints.gridy = 14
         constraints.insets = JBUI.insetsTop(16)
         panel.add(JLabel("Claude Code startup command:"), constraints)
 
-        constraints.gridy = 14
+        constraints.gridy = 15
         constraints.insets = JBUI.insetsTop(4)
         panel.add(claudeCodeTerminalCommandField, constraints)
 
-        constraints.gridy = 15
+        constraints.gridy = 16
         constraints.insets = JBUI.insetsTop(16)
         panel.add(JLabel("On turn end command:"), constraints)
 
-        constraints.gridy = 16
+        constraints.gridy = 17
         constraints.insets = JBUI.insetsTop(4)
         panel.add(onTurnEndCommandField, constraints)
 
-        constraints.gridy = 17
+        constraints.gridy = 18
         constraints.insets = JBUI.insetsTop(16)
         panel.add(appendChangesToNextMessageCheckBox, constraints)
 
-        constraints.gridy = 18
+        constraints.gridy = 19
         constraints.weighty = 1.0
         constraints.fill = GridBagConstraints.BOTH
         panel.add(JPanel(), constraints)
@@ -155,16 +151,12 @@ class AiTerminalToolsConfigurable : Configurable {
             updateCommitMessageModelUi()
         }
 
-        refreshModelsButton.addActionListener {
-            if (selectedCommitMessageAiTool == COMMIT_MESSAGE_AI_TOOL_OPENCODE) loadOpenCodeModels()
-        }
-
         this.fileLinksCheckBox = fileLinksCheckBox
         this.copyLinksCheckBox = copyLinksCheckBox
         this.errorToAiTerminalIconsCheckBox = errorToAiTerminalIconsCheckBox
         this.dragToAiTerminalCheckBox = dragToAiTerminalCheckBox
         this.commitMessageAiToolCombo = commitMessageAiToolCombo
-        this.commitMessageModelCombo = commitMessageModelCombo
+        this.commitMessageModelField = commitMessageModelField
         this.commitMessageAdditionalPromptArea = commitMessageAdditionalPromptArea
         this.openCodeTerminalCommandField = openCodeTerminalCommandField
         this.claudeCodeTerminalCommandField = claudeCodeTerminalCommandField
@@ -178,23 +170,22 @@ class AiTerminalToolsConfigurable : Configurable {
         val settings = AiTerminalToolsSettings.getInstance().getState()
         val currentAiTool = selectedCommitMessageAiTool
         val settingsAiTool = normalizedCommitMessageAiTool(settings.commitMessageAiTool)
-        val currentOpenCodeModel = if (currentAiTool == COMMIT_MESSAGE_AI_TOOL_OPENCODE) {
-            commitMessageModelCombo?.editor?.item?.toString()?.trim().orEmpty()
-        } else {
-            openCodeCommitMessageModel
-        }
-        val currentClaudeModel = if (currentAiTool == COMMIT_MESSAGE_AI_TOOL_CLAUDE) {
-            commitMessageModelCombo?.editor?.item?.toString()?.trim().orEmpty()
+        val currentModel = if (currentAiTool == COMMIT_MESSAGE_AI_TOOL_OPENCODE) {
+            commitMessageModelField?.text?.trim().orEmpty()
         } else {
             claudeCommitMessageModel
+        }
+        val settingsModel = if (settingsAiTool == COMMIT_MESSAGE_AI_TOOL_CLAUDE) {
+            settings.claudeCommitMessageModel
+        } else {
+            settings.commitMessageModel
         }
         return fileLinksCheckBox?.isSelected != settings.fileLinksEnabled ||
             copyLinksCheckBox?.isSelected != settings.copyLinksEnabled ||
             errorToAiTerminalIconsCheckBox?.isSelected != settings.errorToAiTerminalIconsEnabled ||
             dragToAiTerminalCheckBox?.isSelected != settings.isDragToAiTerminalEnabled() ||
             currentAiTool != settingsAiTool ||
-            currentOpenCodeModel != settings.commitMessageModel ||
-            currentClaudeModel != settings.claudeCommitMessageModel ||
+            currentModel != settingsModel ||
             commitMessageAdditionalPromptArea?.text?.trim() != settings.commitMessageAdditionalPrompt ||
             openCodeTerminalCommandField?.text?.trim() != settings.openCodeTerminalCommand ||
             claudeCodeTerminalCommandField?.text?.trim() != settings.claudeCodeTerminalCommand ||
@@ -202,7 +193,6 @@ class AiTerminalToolsConfigurable : Configurable {
             appendChangesToNextMessageCheckBox?.isSelected != settings.appendChangesToNextMessage
     }
 
-    /** Write the current UI state to persistent settings. */
     override fun apply() {
         saveCurrentCommitMessageModel()
         val settings = AiTerminalToolsSettings.getInstance().getState()
@@ -220,7 +210,6 @@ class AiTerminalToolsConfigurable : Configurable {
         settings.appendChangesToNextMessage = appendChangesToNextMessageCheckBox?.isSelected == true
     }
 
-    /** Restore the UI from persistent settings without triggering a second model write. */
     override fun reset() {
         val settings = AiTerminalToolsSettings.getInstance().getState()
         fileLinksCheckBox?.isSelected = settings.fileLinksEnabled
@@ -247,7 +236,7 @@ class AiTerminalToolsConfigurable : Configurable {
         errorToAiTerminalIconsCheckBox = null
         dragToAiTerminalCheckBox = null
         commitMessageAiToolCombo = null
-        commitMessageModelCombo = null
+        commitMessageModelField = null
         commitMessageAdditionalPromptArea = null
         openCodeTerminalCommandField = null
         claudeCodeTerminalCommandField = null
@@ -257,7 +246,7 @@ class AiTerminalToolsConfigurable : Configurable {
     }
 
     private fun saveCurrentCommitMessageModel() {
-        val model = commitMessageModelCombo?.editor?.item?.toString()?.trim().orEmpty()
+        val model = commitMessageModelField?.text?.trim().orEmpty()
         if (selectedCommitMessageAiTool == COMMIT_MESSAGE_AI_TOOL_CLAUDE) {
             claudeCommitMessageModel = model
         } else {
@@ -265,49 +254,13 @@ class AiTerminalToolsConfigurable : Configurable {
         }
     }
 
-    /** Show the model value for the currently selected AI tool. */
     private fun updateCommitMessageModelUi() {
-        if (selectedCommitMessageAiTool == COMMIT_MESSAGE_AI_TOOL_CLAUDE) {
-            commitMessageModelCombo?.editor?.item = claudeCommitMessageModel
+        val model = if (selectedCommitMessageAiTool == COMMIT_MESSAGE_AI_TOOL_CLAUDE) {
+            claudeCommitMessageModel
         } else {
-            commitMessageModelCombo?.editor?.item = openCodeCommitMessageModel
+            openCodeCommitMessageModel
         }
-        if (selectedCommitMessageAiTool == COMMIT_MESSAGE_AI_TOOL_OPENCODE) loadOpenCodeModels()
-    }
-
-    private fun loadOpenCodeModels() {
-        ApplicationManager.getApplication().executeOnPooledThread {
-            val models = try {
-                val baseCommand = AiTerminalToolsSettings.getInstance().getState().openCodeTerminalCommand.trim().ifEmpty { "opencode" }
-                val process = ProcessBuilder(baseCommand, "models")
-                    .redirectError(ProcessBuilder.Redirect.DISCARD)
-                    .start()
-                val output = process.inputStream.bufferedReader().use { it.readText() }
-                if (process.waitFor() == 0) {
-                    output.replace(ANSI_ESCAPE_REGEX, "")
-                        .lineSequence()
-                        .map { it.trim() }
-                        .filter { it.isNotEmpty() }
-                        .distinct()
-                        .toList()
-                } else null
-            } catch (_: Exception) {
-                null
-            }
-
-            if (models != null) {
-                ApplicationManager.getApplication().invokeLater {
-                    val combo = commitMessageModelCombo
-                    if (combo != null && selectedCommitMessageAiTool == COMMIT_MESSAGE_AI_TOOL_OPENCODE) {
-                        val currentModel = combo.editor.item?.toString()?.trim().orEmpty()
-                        val values = (models + currentModel).filter { it.isNotEmpty() }.distinct()
-                        combo.removeAllItems()
-                        values.forEach(combo::addItem)
-                        combo.editor.item = currentModel
-                    }
-                }
-            }
-        }
+        commitMessageModelField?.text = model
     }
 
     private fun commitMessageAiToolFromLabel(label: String?): String {
@@ -339,6 +292,5 @@ class AiTerminalToolsConfigurable : Configurable {
         private const val COMMIT_MESSAGE_AI_TOOL_CLAUDE = "claude"
         private const val COMMIT_MESSAGE_AI_TOOL_OPENCODE_LABEL = "OpenCode"
         private const val COMMIT_MESSAGE_AI_TOOL_CLAUDE_LABEL = "Claude Code"
-        private val ANSI_ESCAPE_REGEX = Regex("\\u001B\\[[;\\d]*[ -/]*[@-~]")
     }
 }
