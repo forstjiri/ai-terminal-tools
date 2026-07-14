@@ -1,5 +1,6 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.gradle.api.tasks.compile.JavaCompile
+import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 
 plugins {
     id("org.jetbrains.kotlin.jvm") version "2.2.21"
@@ -7,7 +8,7 @@ plugins {
 }
 
 group = "io.github.q110"
-version = "0.2.0"
+version = "0.3.0"
 
 kotlin {
     jvmToolchain(25)
@@ -45,7 +46,10 @@ dependencies {
             else       -> intellijIdea(platformVersion)
         }
         bundledPlugin("org.jetbrains.plugins.terminal")
+        testFramework(TestFrameworkType.Platform)
     }
+
+    testImplementation("junit:junit:4.13.2")
 }
 
 intellijPlatform {

@@ -72,6 +72,14 @@ class AiTerminalBridgeService(
         return injectDirectInput(terminal, bracketedPaste(payload), settleAtLineEnd = false)
     }
 
+    /** Uses bracketed paste to write multiline content to the selected terminal created by this plugin. */
+    fun sendDirectPasteToSelectedAiTerminal(payload: String): BridgeResult {
+        val terminal = selectedTerminal()?.takeIf { isUsable(it) && isRecordedAiTerminal(it) }
+            ?: return BridgeResult.Error(NO_ACTIVE_TERMINAL_MESSAGE)
+
+        return injectDirectInput(terminal, bracketedPaste(payload), settleAtLineEnd = false)
+    }
+
     /** Combines dragged paths into one input to avoid lag from repeated events. */
     fun sendDroppedPaths(files: List<VirtualFile>): BridgeResult {
         val payload = files.filter { it.isValid }

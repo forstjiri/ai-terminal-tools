@@ -23,6 +23,13 @@
             id="io.github.q110.aiterminaltools.settings.AiTerminalToolsConfigurable"
             displayName="AI Terminal Tools"/>
         <consoleFilterProvider implementation="io.github.q110.aiterminaltools.filter.AiTerminalToolsFilterProvider"/>
+        <intentionAction>
+            <className>io.github.q110.aiterminaltools.bridge.SendDiagnosticToAiTerminalAction</className>
+            <language>any</language>
+            <category>AI Terminal Tools</category>
+            <skipBeforeAfter>true</skipBeforeAfter>
+            <descriptionDirectoryName>SendDiagnosticToAiTerminalAction</descriptionDirectoryName>
+        </intentionAction>
         <notificationGroup displayType="BALLOON" id="AI Terminal Tools"/>
         <postStartupActivity implementation="io.github.q110.aiterminaltools.bridge.AiTerminalToolsMenuRegistrar"/>
     </extensions>
