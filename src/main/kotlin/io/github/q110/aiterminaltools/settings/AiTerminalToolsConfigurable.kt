@@ -133,30 +133,6 @@ class AiTerminalToolsConfigurable : Configurable {
         panel.add(additionalExtensionsHelpLabel, constraints)
 
         constraints.gridy = 14
-        constraints.insets = JBUI.insetsTop(16)
-        panel.add(JLabel("OpenCode startup command:"), constraints)
-
-        constraints.gridy = 15
-        constraints.insets = JBUI.insetsTop(4)
-        panel.add(openCodeTerminalCommandField, constraints)
-
-        constraints.gridy = 16
-        constraints.insets = JBUI.insetsTop(16)
-        panel.add(JLabel("Claude Code startup command:"), constraints)
-
-        constraints.gridy = 17
-        constraints.insets = JBUI.insetsTop(4)
-        panel.add(claudeCodeTerminalCommandField, constraints)
-
-        constraints.gridy = 18
-        constraints.insets = JBUI.insetsTop(16)
-        panel.add(JLabel("On turn end command:"), constraints)
-
-        constraints.gridy = 19
-        constraints.insets = JBUI.insetsTop(4)
-        panel.add(onTurnEndCommandField, constraints)
-
-        constraints.gridy = 20
         constraints.insets = JBUI.insetsTop(4)
         defaultFileExtensionsArea.isEditable = false
         defaultFileExtensionsArea.lineWrap = true
@@ -165,6 +141,30 @@ class AiTerminalToolsConfigurable : Configurable {
         defaultFileExtensionsArea.foreground = JBColor.namedColor("Label.disabledForeground", JBColor(0x8c8c8c, 0x999999))
         defaultFileExtensionsArea.border = JBUI.Borders.emptyLeft(20)
         panel.add(defaultFileExtensionsArea, constraints)
+
+        constraints.gridy = 15
+        constraints.insets = JBUI.insetsTop(16)
+        panel.add(JLabel("OpenCode startup command:"), constraints)
+
+        constraints.gridy = 16
+        constraints.insets = JBUI.insetsTop(4)
+        panel.add(openCodeTerminalCommandField, constraints)
+
+        constraints.gridy = 17
+        constraints.insets = JBUI.insetsTop(16)
+        panel.add(JLabel("Claude Code startup command:"), constraints)
+
+        constraints.gridy = 18
+        constraints.insets = JBUI.insetsTop(4)
+        panel.add(claudeCodeTerminalCommandField, constraints)
+
+        constraints.gridy = 19
+        constraints.insets = JBUI.insetsTop(16)
+        panel.add(JLabel("On turn end command:"), constraints)
+
+        constraints.gridy = 20
+        constraints.insets = JBUI.insetsTop(4)
+        panel.add(onTurnEndCommandField, constraints)
 
         constraints.gridy = 21
         constraints.weighty = 1.0
