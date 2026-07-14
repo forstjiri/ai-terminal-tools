@@ -91,6 +91,23 @@ class FrontendTerminalHelper(
         return tabs().any { it == tab }
     }
 
+    /** Activates and focuses the given frontend terminal tab. */
+    fun selectTab(tab: Any) {
+        val content = contentOf(tab) ?: return
+        val view = viewOf(tab) ?: return
+        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow(TERMINAL_TOOL_WINDOW_ID) ?: return
+
+        toolWindow.activate(Runnable {
+            toolWindow.contentManager.setSelectedContentCB(content, true, true)
+                .doWhenProcessed(Runnable {
+                    val focusComponent = preferredFocusableComponent(view)
+                    if (focusComponent == null) return@Runnable
+                    IdeFocusManager.getInstance(project)
+                        .requestFocusInProject(focusComponent, project)
+                })
+        }, true, true)
+    }
+
     fun isContentOf(tab: Any, content: Content): Boolean {
         return contentOf(tab) == content
     }

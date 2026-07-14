@@ -52,9 +52,9 @@ class AiTerminalBridgeService(
     private val log = Logger.getInstance(AiTerminalBridgeService::class.java)
     private val openCodeTerminalStartInProgress = AtomicBoolean(false)
     private val claudeCodeTerminalStartInProgress = AtomicBoolean(false)
-    private val aiFrontendTerminals = Collections.newSetFromMap(IdentityHashMap<Any, Boolean>())
-    private val aiLegacyReworkedTerminals = Collections.newSetFromMap(IdentityHashMap<TerminalWidget, Boolean>())
-    private val aiClassicTerminals = Collections.newSetFromMap(IdentityHashMap<TerminalWidget, Boolean>())
+    private val aiFrontendTerminals: MutableMap<Any, AiTool> = Collections.synchronizedMap(IdentityHashMap())
+    private val aiLegacyReworkedTerminals: MutableMap<TerminalWidget, AiTool> = Collections.synchronizedMap(IdentityHashMap())
+    private val aiClassicTerminals: MutableMap<TerminalWidget, AiTool> = Collections.synchronizedMap(IdentityHashMap())
 
     /** Writes directly to the active AI terminal input. */
     fun sendDirectInput(payload: String, dataContext: DataContext, settleAtLineEnd: Boolean = false): BridgeResult {
@@ -102,7 +102,7 @@ class AiTerminalBridgeService(
         pruneInvalidAiTerminalRecords()
 
         val frontendHelper = frontendHelper
-        if (frontendHelper != null && aiFrontendTerminals.any { isFrontendContentOf(frontendHelper, it, content) }) {
+        if (frontendHelper != null && aiFrontendTerminals.keys.any { isFrontendContentOf(frontendHelper, it, content) }) {
             return true
         }
 
@@ -112,7 +112,7 @@ class AiTerminalBridgeService(
 
     internal fun unregisterAiTerminalContent(content: Content) {
         frontendHelper?.let { helper ->
-            aiFrontendTerminals.removeAll { isFrontendContentOf(helper, it, content) }
+            aiFrontendTerminals.keys.removeAll { isFrontendContentOf(helper, it, content) }
         }
 
         val widget = TerminalToolWindowManager.findWidgetByContent(content)
@@ -127,6 +127,12 @@ class AiTerminalBridgeService(
         if (!openCodeTerminalStartInProgress.compareAndSet(false, true)) {
             return BridgeResult.Scheduled
         }
+        val existing = findExistingTerminal(AiTool.OPENCODE)
+        if (existing != null) {
+            activateTerminal(existing)
+            openCodeTerminalStartInProgress.set(false)
+            return BridgeResult.Success
+        }
         scheduleOpenCodeTerminalStart(virtualFileHint)
         return BridgeResult.Scheduled
     }
@@ -135,6 +141,12 @@ class AiTerminalBridgeService(
     fun startClaudeCodeTerminal(virtualFileHint: VirtualFile? = null): BridgeResult {
         if (!claudeCodeTerminalStartInProgress.compareAndSet(false, true)) {
             return BridgeResult.Scheduled
+        }
+        val existing = findExistingTerminal(AiTool.CLAUDE_CODE)
+        if (existing != null) {
+            activateTerminal(existing)
+            claudeCodeTerminalStartInProgress.set(false)
+            return BridgeResult.Success
         }
         scheduleClaudeCodeTerminalStart(virtualFileHint)
         return BridgeResult.Scheduled
@@ -189,6 +201,7 @@ class AiTerminalBridgeService(
             tabName = nextTerminalTabName(OPEN_CODE_TAB_NAME),
             command = launcherCommand,
             toolName = OPEN_CODE_TAB_NAME,
+            tool = AiTool.OPENCODE,
             inProgress = openCodeTerminalStartInProgress,
             projectPath = workingDirectory,
             tabId = tabId,
@@ -245,6 +258,7 @@ class AiTerminalBridgeService(
             tabName = nextTerminalTabName(CLAUDE_CODE_TAB_NAME),
             command = launcherCommand,
             toolName = CLAUDE_CODE_TAB_NAME,
+            tool = AiTool.CLAUDE_CODE,
             inProgress = claudeCodeTerminalStartInProgress,
             projectPath = workingDirectory,
             tabId = tabId,
@@ -253,7 +267,7 @@ class AiTerminalBridgeService(
     }
 
     private fun scheduleTerminalStart(
-        tabName: String, command: String, toolName: String, inProgress: AtomicBoolean,
+        tabName: String, command: String, toolName: String, tool: AiTool, inProgress: AtomicBoolean,
         projectPath: Path, tabId: String, cleanup: () -> Unit
     ) {
         ApplicationManager.getApplication().invokeLater {
@@ -286,14 +300,14 @@ class AiTerminalBridgeService(
                                 return@invokeLater
                             }
                             val workingDirectoryString = workingDirectory.toString()
-                            val result = startFrontendTerminal(tabName, workingDirectoryString, command, toolName)
+                            val result = startFrontendTerminal(tabName, workingDirectoryString, command, toolName, tool)
                                 ?: if (shouldSkipLegacyReworkedTerminal(toolName)) {
-                                    startClassicTerminal(tabName, workingDirectoryString, command, toolName)
+                                    startClassicTerminal(tabName, workingDirectoryString, command, toolName, tool)
                                 } else {
-                                    startLegacyReworkedTerminal(tabName, workingDirectoryString, command, toolName)
+                                    startLegacyReworkedTerminal(tabName, workingDirectoryString, command, toolName, tool)
                                         ?: run {
                                             notifyLegacyReworkedFallbackIfNeeded(toolName)
-                                            startClassicTerminal(tabName, workingDirectoryString, command, toolName)
+                                            startClassicTerminal(tabName, workingDirectoryString, command, toolName, tool)
                                         }
                                 }
                             if (result is BridgeResult.Error) {
@@ -336,7 +350,7 @@ class AiTerminalBridgeService(
         return toolName == OPEN_CODE_TAB_NAME && ideBaselineVersion() in 251..252
     }
 
-    private fun startFrontendTerminal(tabName: String, workingDirectory: String, command: String, toolName: String): BridgeResult? {
+    private fun startFrontendTerminal(tabName: String, workingDirectory: String, command: String, toolName: String, tool: AiTool): BridgeResult? {
         val helper = frontendHelper ?: return null
         return try {
             val tab = helper.createAiTerminal(tabName, workingDirectory)
@@ -346,7 +360,7 @@ class AiTerminalBridgeService(
                 "$toolName terminal started",
                 "Failed to start $toolName"
             ) {
-                registerAiTerminal(TargetTerminal.Frontend(tab))
+                registerAiTerminal(TargetTerminal.Frontend(tab), tool)
             }
         } catch (exception: Throwable) {
             notify(project, "The new terminal is unavailable; falling back to Classic Terminal: ${exception.message}", NotificationType.WARNING)
@@ -354,7 +368,7 @@ class AiTerminalBridgeService(
         }
     }
 
-    private fun startLegacyReworkedTerminal(tabName: String, workingDirectory: String, command: String, toolName: String): BridgeResult? {
+    private fun startLegacyReworkedTerminal(tabName: String, workingDirectory: String, command: String, toolName: String, tool: AiTool): BridgeResult? {
         return try {
             val widget = legacyReworkedTerminalHelper.createAiTerminal(tabName, workingDirectory)
                 ?: return null
@@ -364,10 +378,10 @@ class AiTerminalBridgeService(
                 successMessage = "$toolName terminal started",
                 failurePrefix = "Failed to run $command",
                 onCommandSent = {
-                    registerAiTerminal(TargetTerminal.LegacyReworked(widget))
+                    registerAiTerminal(TargetTerminal.LegacyReworked(widget), tool)
                 },
                 onCommandFailed = {
-                    val result = startClassicTerminal(tabName, workingDirectory, command, toolName)
+                    val result = startClassicTerminal(tabName, workingDirectory, command, toolName, tool)
                     if (result is BridgeResult.Error) {
                         notify(project, result.message, NotificationType.WARNING)
                     }
@@ -379,7 +393,7 @@ class AiTerminalBridgeService(
         }
     }
 
-    private fun startClassicTerminal(tabName: String, workingDirectory: String, command: String, toolName: String): BridgeResult {
+    private fun startClassicTerminal(tabName: String, workingDirectory: String, command: String, toolName: String, tool: AiTool): BridgeResult {
         val terminalToolWindowManager = TerminalToolWindowManager.getInstance(project)
         val toolWindow = terminalToolWindow(terminalToolWindowManager)
             ?: return BridgeResult.Error("Terminal tool window was not found.")
@@ -399,7 +413,7 @@ class AiTerminalBridgeService(
         toolWindow.activate(Runnable {
             try {
                 ShellTerminalWidget.toShellJediTermWidgetOrThrow(widget).executeCommand(command)
-                registerAiTerminal(TargetTerminal.Classic(widget))
+                registerAiTerminal(TargetTerminal.Classic(widget), tool)
                 notify(project, "$toolName terminal started", NotificationType.INFORMATION)
             } catch (exception: Throwable) {
                 notify(project, "Failed to run $command: ${exception.message}", NotificationType.WARNING)
@@ -485,11 +499,11 @@ class AiTerminalBridgeService(
         }
     }
 
-    private fun registerAiTerminal(terminal: TargetTerminal) {
+    private fun registerAiTerminal(terminal: TargetTerminal, tool: AiTool) {
         when (terminal) {
-            is TargetTerminal.Classic -> aiClassicTerminals += terminal.widget
-            is TargetTerminal.LegacyReworked -> aiLegacyReworkedTerminals += terminal.widget
-            is TargetTerminal.Frontend -> aiFrontendTerminals += terminal.tab
+            is TargetTerminal.Classic -> aiClassicTerminals[terminal.widget] = tool
+            is TargetTerminal.LegacyReworked -> aiLegacyReworkedTerminals[terminal.widget] = tool
+            is TargetTerminal.Frontend -> aiFrontendTerminals[terminal.tab] = tool
         }
         project.service<AiTerminalDropService>().refreshDropTarget()
     }
@@ -509,20 +523,69 @@ class AiTerminalBridgeService(
         if (helper == null) {
             aiFrontendTerminals.clear()
         } else {
-            aiFrontendTerminals.removeAll { !helper.isTabExists(it) }
+            aiFrontendTerminals.keys.removeAll { !helper.isTabExists(it) }
         }
 
-        aiLegacyReworkedTerminals.removeAll { widget ->
+        aiLegacyReworkedTerminals.keys.removeAll { widget ->
             !legacyReworkedTerminalHelper.isWidgetContentExists(widget)
         }
 
-        aiClassicTerminals.removeAll { widget ->
+        aiClassicTerminals.keys.removeAll { widget ->
             try {
                 widget.ttyConnector?.isConnected != true
             } catch (_: Throwable) {
                 true
             }
         }
+    }
+
+    private fun findExistingTerminal(tool: AiTool): TargetTerminal? {
+        pruneInvalidAiTerminalRecords()
+
+        for ((tab, tabTool) in aiFrontendTerminals) {
+            if (tabTool == tool && isUsable(TargetTerminal.Frontend(tab))) {
+                return TargetTerminal.Frontend(tab)
+            }
+        }
+        for ((widget, widgetTool) in aiLegacyReworkedTerminals) {
+            if (widgetTool == tool && isUsable(TargetTerminal.LegacyReworked(widget))) {
+                return TargetTerminal.LegacyReworked(widget)
+            }
+        }
+        for ((widget, widgetTool) in aiClassicTerminals) {
+            if (widgetTool == tool && isUsable(TargetTerminal.Classic(widget))) {
+                return TargetTerminal.Classic(widget)
+            }
+        }
+        return null
+    }
+
+    private fun activateTerminal(terminal: TargetTerminal) {
+        when (terminal) {
+            is TargetTerminal.Frontend -> {
+                frontendHelper?.selectTab(terminal.tab)
+            }
+            is TargetTerminal.Classic, is TargetTerminal.LegacyReworked -> {
+                val widget = when (terminal) {
+                    is TargetTerminal.Classic -> terminal.widget
+                    is TargetTerminal.LegacyReworked -> terminal.widget
+                    is TargetTerminal.Frontend -> return
+                }
+                val toolWindow = TerminalToolWindowManager.getInstance(project).toolWindow ?: return
+                toolWindow.activate(Runnable {
+                    val content = findContentForWidget(toolWindow, widget) ?: return@Runnable
+                    toolWindow.contentManager.setSelectedContent(content, true)
+                }, true, true)
+            }
+        }
+    }
+
+    private fun findContentForWidget(toolWindow: ToolWindow, targetWidget: TerminalWidget): Content? {
+        for (content in toolWindow.contentManager.contents) {
+            val widget = TerminalToolWindowManager.findWidgetByContent(content)
+            if (widget === targetWidget) return content
+        }
+        return null
     }
 
     private fun isFrontendContentOf(helper: FrontendTerminalHelper, tab: Any, content: Content): Boolean {

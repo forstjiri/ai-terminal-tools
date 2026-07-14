@@ -13,10 +13,9 @@ Requirements:
 Workflow:
 
 1. Click "Start OpenCode" or "Start Claude Code" in the IDE toolbar.
-2. The plugin creates a new terminal tab, injects the `AITT_*` environment, and runs `opencode` or `claude`.
-3. Activate the target terminal tab.
-4. Send selections from editors, consoles, diffs, or read-only viewers, or send file paths from the project view, editor tabs, or the Commit panel.
-5. AI Turn Diff automatically tracks real file content changes in plugin-started OpenCode / Claude Code terminals and opens a diff window when changes are detected.
+2. The plugin reuses an existing terminal tab for the same tool if one is open, or creates a new tab. It injects the `AITT_*` environment and runs `opencode` or `claude`, then automatically activates the terminal.
+3. Send selections from editors, consoles, diffs, or read-only viewers, or send file paths from the project view, editor tabs, or the Commit panel.
+4. AI Turn Diff automatically tracks real file content changes in plugin-started OpenCode / Claude Code terminals and opens a diff window when changes are detected.
 
 > AI Turn Diff only auto-attaches to OpenCode / Claude Code terminals started from the plugin buttons. Manually started terminals can still receive selection and path sends, but they will not get the turn-tracking hooks/plugin.
 
@@ -43,7 +42,7 @@ C:\Projects\demo\src\main\java\com\example\ExampleController.java:22
 Resolution rules:
 
 - Prefer suffix matching against project files.
-- Supported extensions: `java`, `kt`, `kts`, `gradle`, `js`, `ts`, `vue`, `html`, `css`, `scss`, `sass`, `less`, `py`, `c`, `cpp`, `cc`, `ps1`, `cmd`, `json`, `toml`, `yaml`, `yml`, `conf`, `env`, `properties`, `xml`, `md`, `sql`.
+- Recognizes any file extension of 2 to 12 characters.
 - `@path` references have higher priority for AI terminal path matching.
 - When multiple files match, IntelliJ project index scoring is used; if there are still multiple candidates, a chooser dialog is shown.
 
@@ -86,22 +85,15 @@ Supported sources include JVM, Python, JavaScript/Node.js, TypeScript, Go, Rust,
 
 When OpenCode or Claude Code is started through the plugin, the plugin tracks each AI turn's file modifications and opens a diff when the content actually changes.
 
+- The before-side of the diff is read-only; the after-side shows the current file state.
 - OpenCode: generates a project-level `.opencode/plugins/ai-terminal-tools.js` and a per-terminal launcher.
 - Claude Code: generates `.claude/settings.local.json` hooks and a per-terminal launcher.
 - Diff state is isolated by `tabId` and upstream `sessionID`.
 - You can reopen the last diff from Tools -> AI Terminal Tools -> Show Last AI Turn Diff.
 
-### Commit Message Generation
+### Terminal Tab Reuse
 
-The Commit panel shows a "Generate Commit Message" action that uses the selected OpenCode or Claude Code tool to generate a concise commit message from the checked files.
-
-## Compatibility
-
-| Terminal engine | Range | Notes |
-|----------------|-------|-------|
-| Frontend Terminal | IDE 2025.3+ | Preferred new terminal API |
-| Legacy Reworked Terminal | IDE 2025.1 to 2025.2 | Reflection-based compatibility layer |
-| Classic Terminal | Fallback | Uses `ShellTerminalWidget` and TTY Connector |
+Clicking "Start OpenCode" or "Start Claude Code" when a terminal for that tool already exists activates and focuses the existing tab instead of creating a new one.
 
 ## Settings
 
@@ -110,9 +102,10 @@ Available settings:
 - Enable console error send icon
 - Enable drag-and-drop files/folders to AI Terminal
 - Commit message AI tool (OpenCode or Claude Code)
-- Commit message model (stored per tool)
+- Commit message model (full model name with provider prefix)
 - Commit message additional prompt
-- Additional file extensions
+- On turn end command (shell command run after each AI turn completes)
+- Append diff changes to next agent message
 
 ## Build and Run
 
@@ -140,7 +133,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for project structure and the O
 | Item | Value |
 |------|-------|
 | Plugin ID | `io.github.q110.aiterminaltools` |
-| Version | `0.1.3` |
+| Version | `0.3.0` |
 | Group | `io.github.q110` |
 | Vendor | `zibo` |
 | License | MIT |
