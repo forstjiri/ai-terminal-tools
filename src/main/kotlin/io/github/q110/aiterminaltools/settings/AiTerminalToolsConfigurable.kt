@@ -30,6 +30,7 @@ class AiTerminalToolsConfigurable : Configurable {
     private var additionalFileExtensionsField: JBTextField? = null
     private var openCodeTerminalCommandField: JBTextField? = null
     private var claudeCodeTerminalCommandField: JBTextField? = null
+    private var onTurnEndCommandField: JBTextField? = null
     private var panel: JPanel? = null
     private var selectedCommitMessageAiTool: String = COMMIT_MESSAGE_AI_TOOL_OPENCODE
     private var openCodeCommitMessageModel: String = ""
@@ -58,6 +59,7 @@ class AiTerminalToolsConfigurable : Configurable {
         val additionalFileExtensionsField = JBTextField()
         val openCodeTerminalCommandField = JBTextField()
         val claudeCodeTerminalCommandField = JBTextField()
+        val onTurnEndCommandField = JBTextField()
         val defaultFileExtensionsArea = JBTextArea(
             AiTerminalToolsSettings.StateData.DEFAULT_FILE_EXTENSIONS.joinToString(", ")
         )
@@ -147,6 +149,14 @@ class AiTerminalToolsConfigurable : Configurable {
         panel.add(claudeCodeTerminalCommandField, constraints)
 
         constraints.gridy = 18
+        constraints.insets = JBUI.insetsTop(16)
+        panel.add(JLabel("On turn end command:"), constraints)
+
+        constraints.gridy = 19
+        constraints.insets = JBUI.insetsTop(4)
+        panel.add(onTurnEndCommandField, constraints)
+
+        constraints.gridy = 20
         constraints.insets = JBUI.insetsTop(4)
         defaultFileExtensionsArea.isEditable = false
         defaultFileExtensionsArea.lineWrap = true
@@ -156,7 +166,7 @@ class AiTerminalToolsConfigurable : Configurable {
         defaultFileExtensionsArea.border = JBUI.Borders.emptyLeft(20)
         panel.add(defaultFileExtensionsArea, constraints)
 
-        constraints.gridy = 19
+        constraints.gridy = 21
         constraints.weighty = 1.0
         constraints.fill = GridBagConstraints.BOTH
         panel.add(JPanel(), constraints)
@@ -182,6 +192,7 @@ class AiTerminalToolsConfigurable : Configurable {
         this.additionalFileExtensionsField = additionalFileExtensionsField
         this.openCodeTerminalCommandField = openCodeTerminalCommandField
         this.claudeCodeTerminalCommandField = claudeCodeTerminalCommandField
+        this.onTurnEndCommandField = onTurnEndCommandField
         this.panel = panel
         return panel
     }
@@ -210,7 +221,8 @@ class AiTerminalToolsConfigurable : Configurable {
             currentClaudeModel != settings.claudeCommitMessageModel ||
             commitMessageAdditionalPromptArea?.text?.trim() != settings.commitMessageAdditionalPrompt ||
             openCodeTerminalCommandField?.text?.trim() != settings.openCodeTerminalCommand ||
-            claudeCodeTerminalCommandField?.text?.trim() != settings.claudeCodeTerminalCommand
+            claudeCodeTerminalCommandField?.text?.trim() != settings.claudeCodeTerminalCommand ||
+            onTurnEndCommandField?.text?.trim() != settings.onTurnEndCommand
     }
 
     /** Write the current UI state to persistent settings. */
@@ -228,6 +240,7 @@ class AiTerminalToolsConfigurable : Configurable {
         settings.commitMessageAdditionalPrompt = commitMessageAdditionalPromptArea?.text?.trim().orEmpty()
         settings.openCodeTerminalCommand = openCodeTerminalCommandField?.text?.trim().orEmpty()
         settings.claudeCodeTerminalCommand = claudeCodeTerminalCommandField?.text?.trim().orEmpty()
+        settings.onTurnEndCommand = onTurnEndCommandField?.text?.trim().orEmpty()
     }
 
     /** Restore the UI from persistent settings without triggering a second model write. */
@@ -244,6 +257,7 @@ class AiTerminalToolsConfigurable : Configurable {
         commitMessageAdditionalPromptArea?.text = settings.commitMessageAdditionalPrompt
         openCodeTerminalCommandField?.text = settings.openCodeTerminalCommand
         claudeCodeTerminalCommandField?.text = settings.claudeCodeTerminalCommand
+        onTurnEndCommandField?.text = settings.onTurnEndCommand
         updatingCommitMessageUi = true
         commitMessageAiToolCombo?.selectedItem = commitMessageAiToolLabel(selectedCommitMessageAiTool)
         updatingCommitMessageUi = false
@@ -261,6 +275,7 @@ class AiTerminalToolsConfigurable : Configurable {
         additionalFileExtensionsField = null
         openCodeTerminalCommandField = null
         claudeCodeTerminalCommandField = null
+        onTurnEndCommandField = null
         panel = null
     }
 

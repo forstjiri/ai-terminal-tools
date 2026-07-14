@@ -34,6 +34,7 @@ class AiTerminalToolsSettings : PersistentStateComponent<AiTerminalToolsSettings
         var claudeCommitMessageModel: String = ""
         var openCodeTerminalCommand: String = ""
         var claudeCodeTerminalCommand: String = ""
+        var onTurnEndCommand: String = ""
         var commitMessageAdditionalPrompt: String = ""
         var additionalFileExtensions: String = ""
 

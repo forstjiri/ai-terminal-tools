@@ -6,11 +6,13 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
+import io.github.q110.aiterminaltools.settings.AiTerminalToolsSettings
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 
 @Service(Service.Level.PROJECT)
 class AiTurnMonitorService(
@@ -214,6 +216,8 @@ class AiTurnMonitorService(
                 "changed files: ${turn.changedFiles.size}, failed: $failed"
         )
 
+        runOnTurnEndCommand(turn)
+
         if (turn.changedFiles.isEmpty()) {
             return
         }
@@ -295,6 +299,34 @@ class AiTurnMonitorService(
         }
 
         return normalized
+    }
+
+    private fun runOnTurnEndCommand(turn: AiTurnState) {
+        val raw = AiTerminalToolsSettings.getInstance().getState().onTurnEndCommand.trim()
+        if (raw.isEmpty()) return
+
+        val isWindows = System.getProperty("os.name").lowercase().contains("win")
+        val shellCommand = if (isWindows) listOf("cmd", "/c", raw) else listOf("sh", "-c", raw)
+        val cwd = project.basePath?.let { Path.of(it) }
+
+        Thread {
+            try {
+                val process = ProcessBuilder(shellCommand)
+                    .apply {
+                        directory(cwd?.toFile())
+                        environment()["AITT_TAB_ID"] = turn.tabId
+                        environment()["AITT_TOOL"] = turn.tool.name
+                    }
+                    .redirectErrorStream(true)
+                    .start()
+                if (!process.waitFor(30, TimeUnit.SECONDS)) {
+                    log.warn("On-turn-end command timed out after 30s: $raw")
+                    process.destroyForcibly()
+                }
+            } catch (e: Exception) {
+                log.warn("On-turn-end command failed: $raw", e)
+            }
+        }.also { it.isDaemon = true }.start()
     }
 
     companion object {
