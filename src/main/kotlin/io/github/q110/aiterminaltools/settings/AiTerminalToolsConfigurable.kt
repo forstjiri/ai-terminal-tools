@@ -27,7 +27,6 @@ class AiTerminalToolsConfigurable : Configurable {
     private var commitMessageAiToolCombo: ComboBox<String>? = null
     private var commitMessageModelCombo: ComboBox<String>? = null
     private var commitMessageAdditionalPromptArea: JBTextArea? = null
-    private var additionalFileExtensionsField: JBTextField? = null
     private var openCodeTerminalCommandField: JBTextField? = null
     private var claudeCodeTerminalCommandField: JBTextField? = null
     private var onTurnEndCommandField: JBTextField? = null
@@ -57,14 +56,10 @@ class AiTerminalToolsConfigurable : Configurable {
         commitMessageModelPanel.add(commitMessageModelCombo)
         commitMessageModelPanel.add(refreshModelsButton)
         val commitMessageAdditionalPromptArea = JBTextArea(4, 48)
-        val additionalFileExtensionsField = JBTextField()
         val openCodeTerminalCommandField = JBTextField()
         val claudeCodeTerminalCommandField = JBTextField()
         val onTurnEndCommandField = JBTextField()
         val appendChangesToNextMessageCheckBox = JBCheckBox("Append changes made in diff window to next agent message")
-        val defaultFileExtensionsArea = JBTextArea(
-            AiTerminalToolsSettings.StateData.DEFAULT_FILE_EXTENSIONS.joinToString(", ")
-        )
         val panel = JPanel(GridBagLayout())
         panel.border = JBUI.Borders.empty(12)
 
@@ -122,57 +117,33 @@ class AiTerminalToolsConfigurable : Configurable {
 
         constraints.gridy = 11
         constraints.insets = JBUI.insetsTop(16)
-        panel.add(JLabel("Additional file extensions:"), constraints)
+        panel.add(JLabel("OpenCode startup command:"), constraints)
 
         constraints.gridy = 12
         constraints.insets = JBUI.insetsTop(4)
-        panel.add(additionalFileExtensionsField, constraints)
-
-        constraints.gridy = 13
-        val additionalExtensionsHelpLabel = JBLabel("The extensions below are already supported. Enter only additional extensions, separated by semicolons.")
-        additionalExtensionsHelpLabel.foreground = JBColor.namedColor("Label.disabledForeground", JBColor(0x8c8c8c, 0x999999))
-        additionalExtensionsHelpLabel.border = JBUI.Borders.emptyLeft(20)
-        panel.add(additionalExtensionsHelpLabel, constraints)
-
-        constraints.gridy = 14
-        constraints.insets = JBUI.insetsTop(4)
-        defaultFileExtensionsArea.isEditable = false
-        defaultFileExtensionsArea.lineWrap = true
-        defaultFileExtensionsArea.wrapStyleWord = true
-        defaultFileExtensionsArea.isOpaque = false
-        defaultFileExtensionsArea.foreground = JBColor.namedColor("Label.disabledForeground", JBColor(0x8c8c8c, 0x999999))
-        defaultFileExtensionsArea.border = JBUI.Borders.emptyLeft(20)
-        panel.add(defaultFileExtensionsArea, constraints)
-
-        constraints.gridy = 15
-        constraints.insets = JBUI.insetsTop(16)
-        panel.add(JLabel("OpenCode startup command:"), constraints)
-
-        constraints.gridy = 16
-        constraints.insets = JBUI.insetsTop(4)
         panel.add(openCodeTerminalCommandField, constraints)
 
-        constraints.gridy = 17
+        constraints.gridy = 13
         constraints.insets = JBUI.insetsTop(16)
         panel.add(JLabel("Claude Code startup command:"), constraints)
 
-        constraints.gridy = 18
+        constraints.gridy = 14
         constraints.insets = JBUI.insetsTop(4)
         panel.add(claudeCodeTerminalCommandField, constraints)
 
-        constraints.gridy = 19
+        constraints.gridy = 15
         constraints.insets = JBUI.insetsTop(16)
         panel.add(JLabel("On turn end command:"), constraints)
 
-        constraints.gridy = 20
+        constraints.gridy = 16
         constraints.insets = JBUI.insetsTop(4)
         panel.add(onTurnEndCommandField, constraints)
 
-        constraints.gridy = 21
+        constraints.gridy = 17
         constraints.insets = JBUI.insetsTop(16)
         panel.add(appendChangesToNextMessageCheckBox, constraints)
 
-        constraints.gridy = 22
+        constraints.gridy = 18
         constraints.weighty = 1.0
         constraints.fill = GridBagConstraints.BOTH
         panel.add(JPanel(), constraints)
@@ -195,7 +166,6 @@ class AiTerminalToolsConfigurable : Configurable {
         this.commitMessageAiToolCombo = commitMessageAiToolCombo
         this.commitMessageModelCombo = commitMessageModelCombo
         this.commitMessageAdditionalPromptArea = commitMessageAdditionalPromptArea
-        this.additionalFileExtensionsField = additionalFileExtensionsField
         this.openCodeTerminalCommandField = openCodeTerminalCommandField
         this.claudeCodeTerminalCommandField = claudeCodeTerminalCommandField
         this.onTurnEndCommandField = onTurnEndCommandField
@@ -222,7 +192,6 @@ class AiTerminalToolsConfigurable : Configurable {
             copyLinksCheckBox?.isSelected != settings.copyLinksEnabled ||
             errorToAiTerminalIconsCheckBox?.isSelected != settings.errorToAiTerminalIconsEnabled ||
             dragToAiTerminalCheckBox?.isSelected != settings.isDragToAiTerminalEnabled() ||
-            additionalFileExtensionsField?.text?.trim() != settings.additionalFileExtensions ||
             currentAiTool != settingsAiTool ||
             currentOpenCodeModel != settings.commitMessageModel ||
             currentClaudeModel != settings.claudeCommitMessageModel ||
@@ -241,7 +210,6 @@ class AiTerminalToolsConfigurable : Configurable {
         settings.copyLinksEnabled = copyLinksCheckBox?.isSelected == true
         settings.errorToAiTerminalIconsEnabled = errorToAiTerminalIconsCheckBox?.isSelected == true
         settings.dragToAiTerminalEnabled = dragToAiTerminalCheckBox?.isSelected == true
-        settings.additionalFileExtensions = additionalFileExtensionsField?.text?.trim().orEmpty()
         settings.commitMessageAiTool = selectedCommitMessageAiTool
         settings.commitMessageModel = openCodeCommitMessageModel
         settings.claudeCommitMessageModel = claudeCommitMessageModel
@@ -259,7 +227,6 @@ class AiTerminalToolsConfigurable : Configurable {
         copyLinksCheckBox?.isSelected = settings.copyLinksEnabled
         errorToAiTerminalIconsCheckBox?.isSelected = settings.errorToAiTerminalIconsEnabled
         dragToAiTerminalCheckBox?.isSelected = settings.isDragToAiTerminalEnabled()
-        additionalFileExtensionsField?.text = settings.additionalFileExtensions
         selectedCommitMessageAiTool = normalizedCommitMessageAiTool(settings.commitMessageAiTool)
         openCodeCommitMessageModel = settings.commitMessageModel
         claudeCommitMessageModel = settings.claudeCommitMessageModel
@@ -282,7 +249,6 @@ class AiTerminalToolsConfigurable : Configurable {
         commitMessageAiToolCombo = null
         commitMessageModelCombo = null
         commitMessageAdditionalPromptArea = null
-        additionalFileExtensionsField = null
         openCodeTerminalCommandField = null
         claudeCodeTerminalCommandField = null
         onTurnEndCommandField = null

@@ -20,11 +20,7 @@ import io.github.q110.aiterminaltools.settings.AiTerminalToolsSettings
 internal class AiTerminalToolsFilter(
     private val project: Project
 ) : Filter {
-    /** LRU cache: filename → most recently seen path */
     private val recentFilePathsByName = LinkedHashMap<String, String>()
-    private var cachedFileExtensions: Set<String> = emptySet()
-    private var cachedFileRefPattern: Regex =
-        FilterPatterns.fileRefPattern(AiTerminalToolsSettings.StateData.DEFAULT_FILE_EXTENSIONS)
 
     /** @param line current output line; entireLength is the total content length (for calculating baseOffset) */
     override fun applyFilter(line: String, entireLength: Int): Filter.Result? {
@@ -35,8 +31,7 @@ internal class AiTerminalToolsFilter(
 
         // Stage one: cache file path references in the current line
         if (settings.fileLinksEnabled) {
-            val fileRefPattern = currentFileRefPattern(settings.resolvedFileExtensions())
-            rememberPathReferences(line, fileRefPattern)
+            rememberPathReferences(line)
         }
 
         val baseOffset = entireLength - line.length
@@ -79,7 +74,7 @@ internal class AiTerminalToolsFilter(
             }
 
             // Stage three: parse regular file references (filename-indexed, possibly multiple matches)
-            val fileRefPattern = currentFileRefPattern(settings.resolvedFileExtensions())
+            val fileRefPattern = FilterPatterns.fileRefPattern
             for (match in fileRefPattern.findAll(line)) {
                 if (rangesOverlap(match.range, fileLinkRanges)) continue
 
@@ -127,16 +122,6 @@ internal class AiTerminalToolsFilter(
         return if (items.isEmpty()) null else Filter.Result(items)
     }
 
-    /** Reuse the compiled regex and refresh it only when configured extensions change. */
-    private fun currentFileRefPattern(extensions: Set<String>): Regex {
-        if (extensions != cachedFileExtensions) {
-            cachedFileExtensions = extensions
-            cachedFileRefPattern = FilterPatterns.fileRefPattern(extensions)
-        }
-
-        return cachedFileRefPattern
-    }
-
 private fun normalTextAttributes(): TextAttributes {
         val scheme: EditorColorsScheme = EditorColorsManager.getInstance().globalScheme
         return TextAttributes(
@@ -178,8 +163,8 @@ private fun normalTextAttributes(): TextAttributes {
     }
 
     /** Cache current-line paths in the LRU map to disambiguate later same-name files */
-    private fun rememberPathReferences(line: String, fileRefPattern: Regex) {
-        for (match in fileRefPattern.findAll(line)) {
+    private fun rememberPathReferences(line: String) {
+        for (match in FilterPatterns.fileRefPattern.findAll(line)) {
             val path = normalizePath(match.groupValues[1])
             if (!isPathReference(path)) continue
 
