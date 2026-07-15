@@ -57,14 +57,9 @@ internal fun isPathReference(reference: String): Boolean {
     return reference.contains('/')
 }
 
-/** Check whether two ranges overlap (for deduplicating fileLinks and copyLinks) */
+/** Check whether two ranges overlap (for deduplicating fileLinks) */
 internal fun rangesOverlap(range: IntRange, ranges: List<IntRange>): Boolean {
     return ranges.any { range.first <= it.last && range.last >= it.first }
-}
-
-/** Filter meaningless symbol-only text (only _ - . / and no digits) */
-internal fun isCopyNoise(text: String): Boolean {
-    return text.all { it == '_' || it == '-' || it == '.' || it == '/' || it.isDigit() } && text.none { it.isDigit() }
 }
 
 /** Truncate long text for notification display */

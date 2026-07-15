@@ -26,7 +26,6 @@ class AiTerminalToolsSettings : PersistentStateComponent<AiTerminalToolsSettings
     /** Persistent fields; feature flags are enabled by default. */
     class StateData {
         var fileLinksEnabled: Boolean = true
-        var copyLinksEnabled: Boolean = true
         var errorToAiTerminalIconsEnabled: Boolean = true
         var dragToAiTerminalEnabled: Boolean? = null
         var commitMessageAiTool: String = "opencode"

@@ -17,7 +17,6 @@ import javax.swing.JPanel
 
 class AiTerminalToolsConfigurable : Configurable {
     private var fileLinksCheckBox: JBCheckBox? = null
-    private var copyLinksCheckBox: JBCheckBox? = null
     private var errorToAiTerminalIconsCheckBox: JBCheckBox? = null
     private var dragToAiTerminalCheckBox: JBCheckBox? = null
     private var commitMessageAiToolCombo: javax.swing.JComboBox<String>? = null
@@ -39,7 +38,6 @@ class AiTerminalToolsConfigurable : Configurable {
 
     override fun createComponent(): JComponent {
         val fileLinksCheckBox = JBCheckBox("Enable file navigation links")
-        val copyLinksCheckBox = JBCheckBox("Enable click-to-copy links")
         val errorToAiTerminalIconsCheckBox = JBCheckBox("Enable console error send icons")
         val dragToAiTerminalCheckBox = JBCheckBox("Enable dragging files/folders to AI terminals")
         val commitMessageAiToolCombo = javax.swing.JComboBox(arrayOf(COMMIT_MESSAGE_AI_TOOL_OPENCODE_LABEL, COMMIT_MESSAGE_AI_TOOL_CLAUDE_LABEL))
@@ -62,84 +60,81 @@ class AiTerminalToolsConfigurable : Configurable {
         panel.add(fileLinksCheckBox, constraints)
 
         constraints.gridy = 1
-        panel.add(copyLinksCheckBox, constraints)
-
-        constraints.gridy = 2
         panel.add(errorToAiTerminalIconsCheckBox, constraints)
 
-        constraints.gridy = 3
+        constraints.gridy = 2
         constraints.insets = JBUI.insetsBottom(8)
         panel.add(dragToAiTerminalCheckBox, constraints)
 
-        constraints.gridy = 4
+        constraints.gridy = 3
         constraints.insets = JBUI.insetsTop(4)
         val dragHelpLabel = JBLabel("When enabled, dragging files/folders to any terminal sends them as @path. When disabled, this applies only to terminals started by the plugin.")
         dragHelpLabel.foreground = JBColor.namedColor("Label.disabledForeground", JBColor(0x8c8c8c, 0x999999))
         dragHelpLabel.border = JBUI.Borders.emptyLeft(20)
         panel.add(dragHelpLabel, constraints)
 
-        constraints.gridy = 5
+        constraints.gridy = 4
         constraints.insets = JBUI.insetsTop(16)
         panel.add(JLabel("Commit message AI tool:"), constraints)
 
-        constraints.gridy = 6
+        constraints.gridy = 5
         constraints.insets = JBUI.insetsTop(4)
         panel.add(commitMessageAiToolCombo, constraints)
 
-        constraints.gridy = 7
+        constraints.gridy = 6
         constraints.insets = JBUI.insetsTop(16)
         panel.add(JLabel("Commit message model:"), constraints)
 
-        constraints.gridy = 8
+        constraints.gridy = 7
         constraints.insets = JBUI.insetsTop(4)
         panel.add(commitMessageModelField, constraints)
 
-        constraints.gridy = 9
+        constraints.gridy = 8
         constraints.insets = JBUI.insetsTop(4)
         val modelHelpLabel = JBLabel("Use full model name with provider prefix, e.g. openai/gpt-5.6-luna")
         modelHelpLabel.foreground = JBColor.namedColor("Label.disabledForeground", JBColor(0x8c8c8c, 0x999999))
         modelHelpLabel.border = JBUI.Borders.emptyLeft(20)
         panel.add(modelHelpLabel, constraints)
 
-        constraints.gridy = 10
+        constraints.gridy = 9
         constraints.insets = JBUI.insetsTop(16)
         panel.add(JLabel("Additional commit message prompt:"), constraints)
 
-        constraints.gridy = 11
+        constraints.gridy = 10
         constraints.insets = JBUI.insetsTop(4)
         commitMessageAdditionalPromptArea.lineWrap = true
         commitMessageAdditionalPromptArea.wrapStyleWord = true
         panel.add(JBScrollPane(commitMessageAdditionalPromptArea), constraints)
 
-        constraints.gridy = 12
+        constraints.gridy = 11
         constraints.insets = JBUI.insetsTop(16)
         panel.add(JLabel("OpenCode startup command:"), constraints)
 
-        constraints.gridy = 13
+        constraints.gridy = 12
         constraints.insets = JBUI.insetsTop(4)
         panel.add(openCodeTerminalCommandField, constraints)
 
-        constraints.gridy = 14
+        constraints.gridy = 13
         constraints.insets = JBUI.insetsTop(16)
         panel.add(JLabel("Claude Code startup command:"), constraints)
 
-        constraints.gridy = 15
+        constraints.gridy = 14
         constraints.insets = JBUI.insetsTop(4)
         panel.add(claudeCodeTerminalCommandField, constraints)
 
-        constraints.gridy = 16
+        constraints.gridy = 15
         constraints.insets = JBUI.insetsTop(16)
         panel.add(JLabel("On turn end command:"), constraints)
 
-        constraints.gridy = 17
+        constraints.gridy = 16
         constraints.insets = JBUI.insetsTop(4)
         panel.add(onTurnEndCommandField, constraints)
 
-        constraints.gridy = 18
+        constraints.gridy = 17
         constraints.insets = JBUI.insetsTop(16)
         panel.add(appendChangesToNextMessageCheckBox, constraints)
 
-        constraints.gridy = 19
+        constraints.gridy = 18
         constraints.weighty = 1.0
         constraints.fill = GridBagConstraints.BOTH
         panel.add(JPanel(), constraints)
@@ -152,7 +147,6 @@ class AiTerminalToolsConfigurable : Configurable {
         }
 
         this.fileLinksCheckBox = fileLinksCheckBox
-        this.copyLinksCheckBox = copyLinksCheckBox
         this.errorToAiTerminalIconsCheckBox = errorToAiTerminalIconsCheckBox
         this.dragToAiTerminalCheckBox = dragToAiTerminalCheckBox
         this.commitMessageAiToolCombo = commitMessageAiToolCombo
@@ -181,7 +175,6 @@ class AiTerminalToolsConfigurable : Configurable {
             settings.commitMessageModel
         }
         return fileLinksCheckBox?.isSelected != settings.fileLinksEnabled ||
-            copyLinksCheckBox?.isSelected != settings.copyLinksEnabled ||
             errorToAiTerminalIconsCheckBox?.isSelected != settings.errorToAiTerminalIconsEnabled ||
             dragToAiTerminalCheckBox?.isSelected != settings.isDragToAiTerminalEnabled() ||
             currentAiTool != settingsAiTool ||
@@ -197,7 +190,6 @@ class AiTerminalToolsConfigurable : Configurable {
         saveCurrentCommitMessageModel()
         val settings = AiTerminalToolsSettings.getInstance().getState()
         settings.fileLinksEnabled = fileLinksCheckBox?.isSelected == true
-        settings.copyLinksEnabled = copyLinksCheckBox?.isSelected == true
         settings.errorToAiTerminalIconsEnabled = errorToAiTerminalIconsCheckBox?.isSelected == true
         settings.dragToAiTerminalEnabled = dragToAiTerminalCheckBox?.isSelected == true
         settings.commitMessageAiTool = selectedCommitMessageAiTool
@@ -213,7 +205,6 @@ class AiTerminalToolsConfigurable : Configurable {
     override fun reset() {
         val settings = AiTerminalToolsSettings.getInstance().getState()
         fileLinksCheckBox?.isSelected = settings.fileLinksEnabled
-        copyLinksCheckBox?.isSelected = settings.copyLinksEnabled
         errorToAiTerminalIconsCheckBox?.isSelected = settings.errorToAiTerminalIconsEnabled
         dragToAiTerminalCheckBox?.isSelected = settings.isDragToAiTerminalEnabled()
         selectedCommitMessageAiTool = normalizedCommitMessageAiTool(settings.commitMessageAiTool)
@@ -232,7 +223,6 @@ class AiTerminalToolsConfigurable : Configurable {
 
     override fun disposeUIResources() {
         fileLinksCheckBox = null
-        copyLinksCheckBox = null
         errorToAiTerminalIconsCheckBox = null
         dragToAiTerminalCheckBox = null
         commitMessageAiToolCombo = null
