@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.github.q110"
-version = "0.3.0"
+version = "0.3.2"
 
 kotlin {
     jvmToolchain(25)
