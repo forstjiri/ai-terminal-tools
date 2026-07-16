@@ -69,8 +69,8 @@ intellijPlatform {
         name = "Opencode / Claude TUI integration"
         version = project.version.toString()
         description = """
-            <p>🚀 Use your favorite TUI AI coding agent inside IntelliJ with superpowers!</p>
-            
+            Use your favorite TUI AI coding agent inside IntelliJ with superpowers!
+
             <p>
               🛠️ There are many tools that integrate OpenCode or Claude, but complex GUIs never perfectly mirror the TUI experience. On the flip side, pure TUI tools often lack seamless interaction between the IDE and the terminal.
               <br><br>
