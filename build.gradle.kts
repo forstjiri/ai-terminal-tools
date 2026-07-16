@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.github.forstjiri"
-version = "0.4.0"
+version = "0.4.1"
 
 kotlin {
     jvmToolchain(25)
@@ -72,9 +72,9 @@ intellijPlatform {
             Use your favorite TUI AI coding agent inside IntelliJ with superpowers!
 
             <p>
-              🛠️ There are many tools that integrate OpenCode or Claude, but complex GUIs never perfectly mirror the TUI experience. On the flip side, pure TUI tools often lack seamless interaction between the IDE and the terminal.
+              🛠️ There are many tools that integrate OpenCode or Claude, but complex GUIs never perfectly mirror the TUI functionality. On the flip side, pure TUI tools often lack seamless interaction between the IDE and the terminal.
               <br><br>
-              💡 To bridge this gap, I forked this awesome Chinese plugin, translated it, and modified it for a comfortable, seamless workflow. Feedback is highly welcome!
+              💡 To bridge this gap, I forked <a href="https://github.com/Q-110/ai-terminal-tools">🍴 this</a> Chinese plugin, translated it, and modified it for a comfortable, seamless workflow. Feedback is highly welcome!
             </p>
             
             <h4>✨ Features</h4>
@@ -83,11 +83,9 @@ intellijPlatform {
               <li>📤 <strong>Send context:</strong> Easily send editor selections, file paths, dragged files, and console error blocks directly to your active OpenCode or Claude Code terminal.</li>
               <li>🔍 <strong>Diff review:</strong> Review file changes from each AI turn side-by-side using the native IntelliJ diff window.</li>
               <li>↩️ <strong>One-click revert:</strong> Instantly revert AI changes and append the context to your next message.</li>
-              <li>📝 <strong>Smart commits:</strong> Generate concise commit messages from selected files in the Commit panel, with a configurable AI tool, model, and custom prompt.</li>
+              <li>📝 <strong>Generate commit messages:</strong> Generate concise commit messages from selected files in the Commit panel, with a configurable AI tool, model, and custom prompt.</li>
               <li>🔔 <strong>Post-turn actions:</strong> Run custom commands automatically after a turn ends (e.g., play sounds using <code>pw-play</code>).</li>              
             </ul>
-            
-            <p>🍴 Forked from <a href="https://github.com/Q-110/ai-terminal-tools">Q-110/ai-terminal-tools</a> with new functionality and improvements.</p>
         """.trimIndent()
         changeNotes = """
             Forked plugin and added new functionality
