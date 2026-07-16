@@ -1,6 +1,6 @@
-# AI Terminal Tools
+# Opencode / Claude TUI integration
 
-AI Terminal Tools is a JetBrains IDE plugin for terminal, console, and Commit panel workflows. It adds file jump links, click-to-copy, AI terminal sending, OpenCode / Claude Code launch actions, console error sending, AI Turn Diff, and commit message generation.
+A JetBrains IDE plugin for terminal, console, and Commit panel workflows. Forked from [Q-110/ai-terminal-tools](https://github.com/Q-110/ai-terminal-tools) with enhancements and new functionality. 
 
 ## Promo
 
@@ -57,12 +57,6 @@ Resolution rules:
 - `@path` references have higher priority for AI terminal path matching.
 - When multiple files match, IntelliJ project index scoring is used; if there are still multiple candidates, a chooser dialog is shown.
 
-### Click to Copy
-
-Structured output fragments can be turned into clickable copy targets that copy text to the system clipboard and show a small "Copied" hint.
-
-Supported patterns include `{{...}}`, `[[...]]`, function calls, URLs, dotted chains, quoted strings, identifiers, and numbers.
-
 ### AI Terminal Sending
 
 Send editor selections, file paths, or console errors into the active terminal input area. The target terminal can be OpenCode or Claude Code.
@@ -100,7 +94,7 @@ When OpenCode or Claude Code is started through the plugin, the plugin tracks ea
 - OpenCode: generates a project-level `.opencode/plugins/ai-terminal-tools.js` and a per-terminal launcher.
 - Claude Code: generates `.claude/settings.local.json` hooks and a per-terminal launcher.
 - Diff state is isolated by `tabId` and upstream `sessionID`.
-- You can reopen the last diff from Tools -> AI Terminal Tools -> Show Last AI Turn Diff.
+- You can reopen the last diff from Tools -> Opencode / Claude TUI integration -> Show Last AI Turn Diff.
 
 ### Terminal Tab Reuse
 
@@ -143,8 +137,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for project structure and the O
 
 | Item | Value |
 |------|-------|
-| Plugin ID | `io.github.q110.aiterminaltools` |
-| Version | `0.3.0` |
-| Group | `io.github.q110` |
-| Vendor | `zibo` |
+| Plugin ID | `io.github.forstjiri.aiterminaltool` |
+| Version | `0.3.3` |
+| Group | `io.github.forstjiri` |
+| Vendor | `forstjiri` |
 | License | MIT |

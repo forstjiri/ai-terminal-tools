@@ -7,8 +7,8 @@ plugins {
     id("org.jetbrains.intellij.platform") version "2.12.0"
 }
 
-group = "io.github.q110"
-version = "0.3.3"
+group = "io.github.forstjiri"
+version = "0.4.0"
 
 kotlin {
     jvmToolchain(25)
@@ -65,28 +65,32 @@ intellijPlatform {
     }
 
     pluginConfiguration {
-        id = "io.github.q110.aiterminaltools"
-        name = "AI Terminal Tools"
+        id = "io.github.forstjiri.aiterminaltool"
+        name = "Opencode / Claude TUI integration"
         version = project.version.toString()
         description = """
-            <p>AI Terminal Tools enhances JetBrains IDE terminals, consoles, and the Commit panel with fast navigation, click-to-copy, AI terminal sending, OpenCode / Claude Code launch actions, AI Turn Diff, and commit message generation.</p>
-            <p>Designed for JetBrains IDEs 2025.1+ and compatible with Frontend, Reworked, and Classic terminal paths.</p>
+            <p>🚀 Use your favorite TUI AI coding agent inside IntelliJ with superpowers!</p>
+            
+            <p>
+              🛠️ There are many tools that integrate OpenCode or Claude, but complex GUIs never perfectly mirror the TUI experience. On the flip side, pure TUI tools often lack seamless interaction between the IDE and the terminal.
+              <br><br>
+              💡 To bridge this gap, I forked this awesome Chinese plugin, translated it, and modified it for a comfortable, seamless workflow. Feedback is highly welcome!
+            </p>
+            
+            <h4>✨ Features</h4>
             <ul>
-              <li>Jump from terminal or console file references to editor locations, including line numbers and line ranges.</li>
-              <li>Copy structured terminal output fragments such as URLs, method calls, dotted identifiers, strings, and numbers with one click.</li>
-              <li>Send editor selections, file paths, dragged files, and console error blocks to the active OpenCode or Claude Code terminal.</li>
-              <li>Start OpenCode or Claude Code in dedicated terminal tabs with the environment needed for AI Turn Diff.</li>
-              <li>Review files with actual content changes from each AI turn in an IntelliJ diff window.</li>
-              <li>Generate concise commit messages from checked files in the Commit panel, with configurable AI tool, model, and extra prompt.</li>
+              <li>🎯 <strong>Jump to code:</strong> Instantly jump from terminal or console file references to exact editor locations, including line numbers and ranges.</li>
+              <li>📤 <strong>Send context:</strong> Easily send editor selections, file paths, dragged files, and console error blocks directly to your active OpenCode or Claude Code terminal.</li>
+              <li>🔍 <strong>Diff review:</strong> Review file changes from each AI turn side-by-side using the native IntelliJ diff window.</li>
+              <li>↩️ <strong>One-click revert:</strong> Instantly revert AI changes and append the context to your next message.</li>
+              <li>📝 <strong>Smart commits:</strong> Generate concise commit messages from selected files in the Commit panel, with a configurable AI tool, model, and custom prompt.</li>
+              <li>🔔 <strong>Post-turn actions:</strong> Run custom commands automatically after a turn ends (e.g., play sounds using <code>pw-play</code>).</li>              
             </ul>
+            
+            <p>🍴 Forked from <a href="https://github.com/Q-110/ai-terminal-tools">Q-110/ai-terminal-tools</a> with new functionality and improvements.</p>
         """.trimIndent()
         changeNotes = """
-            <ul>
-              <li>Fixes AI Turn Diff opening when OpenCode only reads files.</li>
-              <li>OpenCode now records changes only for write tools such as edit, write, and apply_patch.</li>
-              <li>AI Turn Diff filters files with identical before and after content before showing the diff window.</li>
-              <li>Skips project root and directory paths to avoid unnamed entries in the diff file list.</li>
-            </ul>
+            Forked plugin and added new functionality
         """.trimIndent()
 
         ideaVersion {

@@ -33,7 +33,7 @@ class AiTerminalToolsConfigurable : Configurable {
     private var updatingCommitMessageUi: Boolean = false
 
     override fun getDisplayName(): String {
-        return "AI Terminal Tools"
+        return "Opencode / Claude TUI integration"
     }
 
     override fun createComponent(): JComponent {

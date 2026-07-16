@@ -1,12 +1,12 @@
 <idea-plugin require-restart="true">
-    <id>io.github.q110.aiterminaltools</id>
-    <name>AI Terminal Tools</name>
-    <vendor>zibo</vendor>
+    <id>io.github.forstjiri.aiterminaltool</id>
+    <name>Opencode / Claude TUI integration</name>
+    <vendor>forstjiri</vendor>
 
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.modules.vcs</depends>
     <depends>org.jetbrains.plugins.terminal</depends>
-    <depends optional="true">intellij.terminal.frontend</depends>
+    <depends optional="true" config-file="terminal-frontend.xml">intellij.terminal.frontend</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <applicationService serviceImplementation="io.github.q110.aiterminaltools.settings.AiTerminalToolsSettings"/>
@@ -21,7 +21,7 @@
             parentId="tools"
             instance="io.github.q110.aiterminaltools.settings.AiTerminalToolsConfigurable"
             id="io.github.q110.aiterminaltools.settings.AiTerminalToolsConfigurable"
-            displayName="AI Terminal Tools"/>
+            displayName="Opencode / Claude TUI integration"/>
         <consoleFilterProvider implementation="io.github.q110.aiterminaltools.filter.AiTerminalToolsFilterProvider"/>
         <intentionAction>
             <className>io.github.q110.aiterminaltools.bridge.SendDiagnosticToAiTerminalAction</className>

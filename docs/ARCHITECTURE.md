@@ -1,6 +1,8 @@
-# AI Terminal Tools Architecture
+# Opencode / Claude TUI integration — Architecture
 
 This document summarizes the source structure, terminal compatibility layers, and the OpenCode / Claude Code integration used by AI Turn Diff.
+
+Forked from [Q-110/ai-terminal-tools](https://github.com/Q-110/ai-terminal-tools).
 
 ## Project Structure
 
@@ -29,9 +31,6 @@ src/main/kotlin/io/github/q110/aiterminaltools/
 │   ├── FileReferenceHyperlinkInfo.kt      # Jump to the best matching file and line
 │   ├── FolderReferenceHyperlinkInfo.kt    # Select and expand a folder in Project View
 │   └── FileChoiceDialog.kt                # Manual chooser for ambiguous file matches
-|
-├── copy/                                  # Click-to-copy
-│   └── CopyTextHyperlinkInfo.kt           # Copies text to clipboard and shows a hint
 |
 ├── console/                               # Console error handling
 │   ├── ConsoleErrorBlockParser.kt         # Extracts error blocks from Run/Debug output

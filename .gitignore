@@ -24,3 +24,4 @@ local.properties
 /.reasonix/
 /.claude/
 /.opencode/
+.gradle-local/
