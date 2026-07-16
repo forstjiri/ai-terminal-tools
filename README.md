@@ -2,7 +2,18 @@
 
 AI Terminal Tools is a JetBrains IDE plugin for terminal, console, and Commit panel workflows. It adds file jump links, click-to-copy, AI terminal sending, OpenCode / Claude Code launch actions, console error sending, AI Turn Diff, and commit message generation.
 
-## Quick Start
+## Promo
+
+| Preview                    | Link                                                                                                                                                          |
+|----------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Send to Terminal           | <a href="promo/send_to_terminal.png" target="_blank" rel="noopener noreferrer"><img src="promo/send_to_terminal.png" alt="Send to Terminal" width="240" /></a> |
+| Commit Message Generation  | <a href="promo/commit_message_generation.png" target="_blank" rel="noopener noreferrer"><img src="promo/commit_message_generation.png" alt="Commit Message Generation" width="240" /></a> |
+| Settings                   | <a href="promo/settings.png" target="_blank" rel="noopener noreferrer"><img src="promo/settings.png" alt="Settings" width="240" /></a>                     |
+| Jump to Definition         | <a href="promo/jump_to_definition.mp4" target="_blank" rel="noopener noreferrer">Open jump_to_definition.mp4</a>                                              |
+| Send Hint to Terminal      | <a href="promo/send_hint_to_terminal.mp4" target="_blank" rel="noopener noreferrer">Open send_hint_to_terminal.mp4</a>                                        |
+| Append Reverted to Message | <a href="promo/append_reverted_to_message.mp4" target="_blank" rel="noopener noreferrer">Open append_reverted_to_message.mp4</a>                              |
+| Send Selection to Terminal | <a href="promo/send_selection_to_terminal.mp4" target="_blank" rel="noopener noreferrer">Open send_selection_to_terminal.mp4</a>                              |
+
 
 Requirements:
 
