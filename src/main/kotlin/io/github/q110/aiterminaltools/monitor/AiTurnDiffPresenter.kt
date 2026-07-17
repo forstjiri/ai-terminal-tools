@@ -2,6 +2,8 @@
 package io.github.q110.aiterminaltools.monitor
 
 import com.intellij.diff.DiffContentFactory
+import com.intellij.diff.comparison.ComparisonManager
+import com.intellij.diff.comparison.ComparisonPolicy
 import com.intellij.diff.util.DiffUserDataKeys
 import com.intellij.diff.requests.SimpleDiffRequest
 import com.intellij.notification.NotificationGroupManager
@@ -9,6 +11,7 @@ import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.progress.EmptyProgressIndicator
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import io.github.q110.aiterminaltools.bridge.AiTerminalBridgeService
@@ -233,28 +236,31 @@ class AiTurnDiffPresenter(
     }
 
     private fun generateUnifiedDiff(displayPath: String, oldText: String, newText: String): String {
-        val oldFile = Files.createTempFile("aitt-old", ".txt")
-        val newFile = Files.createTempFile("aitt-new", ".txt")
         return try {
-            Files.writeString(oldFile, oldText)
-            Files.writeString(newFile, newText)
-            val process = ProcessBuilder(
-                "diff", "-u",
-                "--label", "a/$displayPath",
-                "--label", "b/$displayPath",
-                oldFile.toString(), newFile.toString()
-            )
-                .redirectErrorStream(true)
-                .start()
-            val output = process.inputStream.bufferedReader().use { it.readText() }
-            process.waitFor()
-            output
+            val oldLines = oldText.lines()
+            val newLines = newText.lines()
+            val changes = ComparisonManager.getInstance()
+                .compareLines(oldText, newText, ComparisonPolicy.DEFAULT, EmptyProgressIndicator())
+            val sb = StringBuilder()
+            sb.append("--- a/$displayPath\n")
+            sb.append("+++ b/$displayPath\n")
+            for (change in changes) {
+                val oldStart = change.startLine1 + 1
+                val newStart = change.startLine2 + 1
+                val oldCount = change.endLine1 - change.startLine1
+                val newCount = change.endLine2 - change.startLine2
+                sb.append("@@ -$oldStart,$oldCount +$newStart,$newCount @@\n")
+                for (i in change.startLine1 until change.endLine1.coerceAtMost(oldLines.size)) {
+                    sb.append("-${oldLines[i]}\n")
+                }
+                for (i in change.startLine2 until change.endLine2.coerceAtMost(newLines.size)) {
+                    sb.append("+${newLines[i]}\n")
+                }
+            }
+            sb.toString()
         } catch (e: Throwable) {
             log.warn("Failed to generate unified diff for $displayPath", e)
             ""
-        } finally {
-            Files.deleteIfExists(oldFile)
-            Files.deleteIfExists(newFile)
         }
     }
 

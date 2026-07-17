@@ -35,12 +35,12 @@ class SendDiagnosticToAiTerminalAction : IntentionAction, DumbAware, Iconable {
         DaemonCodeAnalyzerEx.processHighlights(
             editor.document,
             project,
-            HighlightSeverity.WARNING,
+            HighlightSeverity.WEAK_WARNING,
             offset,
             offset,
         ) { info ->
             val severity = info.severity
-            if (severity != HighlightSeverity.ERROR && severity != HighlightSeverity.WARNING) {
+            if (severity != HighlightSeverity.ERROR && severity != HighlightSeverity.WARNING && severity != HighlightSeverity.WEAK_WARNING) {
                 return@processHighlights true
             }
             val message = DiagnosticPayload.message(info.description, info.toolTip)
