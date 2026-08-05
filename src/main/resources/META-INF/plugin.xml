@@ -62,6 +62,12 @@
             text="Start Claude Code"
             description="Open a new terminal and run claude"/>
         <action
+            id="AiTerminalTools.StartPi"
+            class="io.github.q110.aiterminaltools.bridge.StartPiAction"
+            icon="/icons/pi-action.svg"
+            text="Start Pi"
+            description="Open a new terminal and run pi"/>
+        <action
             id="AiTerminalTools.GenerateCommitMessage"
             class="io.github.q110.aiterminaltools.bridge.GenerateCommitMessageAction"
             icon="/icons/send-selection.svg"
@@ -74,5 +80,22 @@
             class="io.github.q110.aiterminaltools.monitor.ShowLastAiTurnDiffAction"
             text="Show Last AI Turn Diff"
             description="Reopen the diff window for the latest AI changes"/>
+        <group
+            id="AiTerminalTools.QuerySelectionViaAi"
+            popup="true"
+            text="Query Selection via AI"
+            icon="/icons/send-selection.svg"
+            description="AI-powered selection actions">
+            <action
+                id="AiTerminalTools.ModifySelectionWithAi"
+                class="io.github.q110.aiterminaltools.bridge.ModifySelectionWithAiAction"
+                text="Modify Selection with AI"
+                description="Send selected code to AI and replace it with the modified version"/>
+            <action
+                id="AiTerminalTools.ExplainSelectionWithAi"
+                class="io.github.q110.aiterminaltools.bridge.ExplainSelectionWithAiAction"
+                text="Explain with AI"
+                description="Send selected code to AI and show a brief explanation"/>
+        </group>
     </actions>
 </idea-plugin>

@@ -25,3 +25,4 @@ local.properties
 /.claude/
 /.opencode/
 .gradle-local/
+.slim

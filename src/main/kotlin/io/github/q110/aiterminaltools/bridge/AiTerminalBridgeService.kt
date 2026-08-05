@@ -24,7 +24,9 @@ import io.github.q110.aiterminaltools.monitor.AiTool
 import io.github.q110.aiterminaltools.monitor.AiTurnEventServer
 import io.github.q110.aiterminaltools.monitor.AiTurnHookInstaller
 import io.github.q110.aiterminaltools.monitor.AiTurnOpenCodeInstaller
+import io.github.q110.aiterminaltools.monitor.AiTurnPiInstaller
 import io.github.q110.aiterminaltools.monitor.AiTurnMonitorService
+import io.github.q110.aiterminaltools.settings.AiTerminalToolsSettings
 import org.jetbrains.plugins.terminal.ShellStartupOptions
 import org.jetbrains.plugins.terminal.ShellTerminalWidget
 import org.jetbrains.plugins.terminal.TerminalToolWindowManager
@@ -52,6 +54,7 @@ class AiTerminalBridgeService(
     private val log = Logger.getInstance(AiTerminalBridgeService::class.java)
     private val openCodeTerminalStartInProgress = AtomicBoolean(false)
     private val claudeCodeTerminalStartInProgress = AtomicBoolean(false)
+    private val piTerminalStartInProgress = AtomicBoolean(false)
     private val aiFrontendTerminals: MutableMap<Any, AiTool> = Collections.synchronizedMap(IdentityHashMap())
     private val aiLegacyReworkedTerminals: MutableMap<TerminalWidget, AiTool> = Collections.synchronizedMap(IdentityHashMap())
     private val aiClassicTerminals: MutableMap<TerminalWidget, AiTool> = Collections.synchronizedMap(IdentityHashMap())
@@ -149,6 +152,21 @@ class AiTerminalBridgeService(
             return BridgeResult.Success
         }
         scheduleClaudeCodeTerminalStart(virtualFileHint)
+        return BridgeResult.Scheduled
+    }
+
+    /** Creates a new Pi terminal and starts pi. */
+    fun startPiTerminal(virtualFileHint: VirtualFile? = null): BridgeResult {
+        if (!piTerminalStartInProgress.compareAndSet(false, true)) {
+            return BridgeResult.Scheduled
+        }
+        val existing = findExistingTerminal(AiTool.PI)
+        if (existing != null) {
+            activateTerminal(existing)
+            piTerminalStartInProgress.set(false)
+            return BridgeResult.Success
+        }
+        schedulePiTerminalStart(virtualFileHint)
         return BridgeResult.Scheduled
     }
 
@@ -263,6 +281,62 @@ class AiTerminalBridgeService(
             projectPath = workingDirectory,
             tabId = tabId,
             cleanup = { AiTurnHookInstaller(project).cleanupLauncherScripts(workingDirectory, tabId) }
+        )
+    }
+
+    private fun schedulePiTerminalStart(virtualFileHint: VirtualFile?) {
+        val workingDirectory = try {
+            ProjectBasePath.resolveTerminalExecutionRoot(project, virtualFileHint)
+        } catch (exception: Throwable) {
+            piTerminalStartInProgress.set(false)
+            notify(project, exception.message.orEmpty(), NotificationType.WARNING)
+            return
+        }
+        val tabId = UUID.randomUUID().toString()
+        val token = generateSecureToken()
+
+        val port = try {
+            project.service<AiTurnEventServer>().ensureStarted()
+        } catch (exception: Throwable) {
+            log.error("Failed to start AiTurnEventServer", exception)
+            piTerminalStartInProgress.set(false)
+            notify(project, "Failed to start the AI Turn Event Server: ${exception.message}", NotificationType.WARNING)
+            return
+        }
+
+        val launcherCommand = try {
+            val installer = AiTurnPiInstaller(project)
+            val launcherPaths = installer.installPiExtension(workingDirectory, tabId, token, port)
+            if (isWindows()) {
+                launcherPaths.cmdPath.toString()
+            } else {
+                launcherPaths.shPath.toString()
+            }
+        } catch (exception: Throwable) {
+            log.error("Failed to install Pi extension", exception)
+            piTerminalStartInProgress.set(false)
+            notify(project, "Failed to install the Pi extension: ${exception.message}", NotificationType.WARNING)
+            return
+        }
+
+        val tabContext = AiTerminalTabContext(
+            tabId = tabId,
+            token = token,
+            tool = AiTool.PI,
+            workingDirectory = workingDirectory,
+            createdAtMillis = System.currentTimeMillis()
+        )
+        project.service<AiTurnMonitorService>().registerTab(tabContext)
+
+        scheduleTerminalStart(
+            tabName = nextTerminalTabName(PI_TAB_NAME),
+            command = launcherCommand,
+            toolName = PI_TAB_NAME,
+            tool = AiTool.PI,
+            inProgress = piTerminalStartInProgress,
+            projectPath = workingDirectory,
+            tabId = tabId,
+            cleanup = { AiTurnPiInstaller(project).cleanupLauncherScripts(workingDirectory, tabId) }
         )
     }
 
@@ -693,7 +767,8 @@ class AiTerminalBridgeService(
         private const val NOTIFICATION_GROUP_ID = "AI Terminal Tools"
         private const val OPEN_CODE_TAB_NAME = "OpenCode"
         private const val CLAUDE_CODE_TAB_NAME = "Claude Code"
-        private const val NO_ACTIVE_TERMINAL_MESSAGE = "Start and activate an OpenCode or Claude Code terminal first."
+        private const val PI_TAB_NAME = "Pi"
+        private const val NO_ACTIVE_TERMINAL_MESSAGE = "Start and activate an OpenCode, Claude Code, or Pi terminal first."
         private const val LINE_END_SPACE = "\u0005 "
         private const val BRACKETED_PASTE_START = "\u001B[200~"
         private const val BRACKETED_PASTE_END = "\u001B[201~"

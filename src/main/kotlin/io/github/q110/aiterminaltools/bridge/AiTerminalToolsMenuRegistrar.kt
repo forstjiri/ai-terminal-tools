@@ -21,11 +21,16 @@ class AiTerminalToolsMenuRegistrar : StartupActivity, DumbAware {
         registerMenuFirst(actionManager, "ConsoleEditorPopupMenu", "AiTerminalTools.SendSelectionToAiTerminal")
         registerMenuFirst(actionManager, "Diff.EditorPopupMenu", "AiTerminalTools.SendSelectionToAiTerminal")
         registerMenuFirst(actionManager, "TextViewerEditorPopupMenu", "AiTerminalTools.SendSelectionToAiTerminal")
+        registerMenuFirst(actionManager, "EditorPopupMenu", "AiTerminalTools.QuerySelectionViaAi")
+        registerMenuFirst(actionManager, "ConsoleEditorPopupMenu", "AiTerminalTools.QuerySelectionViaAi")
+        registerMenuFirst(actionManager, "Diff.EditorPopupMenu", "AiTerminalTools.QuerySelectionViaAi")
+        registerMenuFirst(actionManager, "TextViewerEditorPopupMenu", "AiTerminalTools.QuerySelectionViaAi")
         registerMenuFirst(actionManager, "ProjectViewPopupMenu", "AiTerminalTools.SendPathToAiTerminal")
         registerMenuFirst(actionManager, "EditorTabPopupMenu", "AiTerminalTools.SendPathToAiTerminal")
         registerMenuFirst(actionManager, "ChangesViewPopupMenu", "AiTerminalTools.SendPathToAiTerminal")
         registerToolbarAction(actionManager, "AiTerminalTools.StartOpenCode")
         registerToolbarAction(actionManager, "AiTerminalTools.StartClaudeCode")
+        registerToolbarAction(actionManager, "AiTerminalTools.StartPi")
     }
 
     /** Inserts the action at the beginning of the menu group using Constraints.FIRST. */

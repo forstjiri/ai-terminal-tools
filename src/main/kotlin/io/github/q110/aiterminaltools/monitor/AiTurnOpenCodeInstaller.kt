@@ -7,7 +7,6 @@ import io.github.q110.aiterminaltools.ProjectBasePath
 import io.github.q110.aiterminaltools.settings.AiTerminalToolsSettings
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.attribute.PosixFilePermission
 
 /**
  * `.opencode/plugins` is project-level and must not contain tab-specific token/port values.
@@ -19,7 +18,7 @@ class AiTurnOpenCodeInstaller(
     private val log = Logger.getInstance(AiTurnOpenCodeInstaller::class.java)
 
     /** Install the OpenCode project plugin and return the current tab's launcher script paths */
-    fun installOpenCodePlugin(basePath: Path, tabId: String, token: String, port: Int): AiTurnHookInstaller.LauncherPaths {
+    fun installOpenCodePlugin(basePath: Path, tabId: String, token: String, port: Int): AiTerminalLauncher.Paths {
         val validatedBasePath = ProjectBasePath.requireValid(basePath)
         val toolsDir = validatedBasePath.resolve(".idea").resolve("ai-terminal-tools")
         ProjectBasePath.requireValid(validatedBasePath)
@@ -192,51 +191,22 @@ class AiTurnOpenCodeInstaller(
 
     private fun writeLauncherScripts(
         toolsDir: Path, tabId: String, token: String, port: Int
-    ): AiTurnHookInstaller.LauncherPaths {
-        val cmdFile = toolsDir.resolve("run-opencode-$tabId.cmd")
-        val shFile = toolsDir.resolve("run-opencode-$tabId.sh")
-        val customCommand = AiTerminalToolsSettings.getInstance().getState().openCodeTerminalCommand.trim()
-        val execCommand = customCommand.ifEmpty { "opencode" }
-
-        Files.writeString(cmdFile, buildString {
-            appendLine("@echo off")
-            appendLine("set AITT_PORT=$port")
-            appendLine("set AITT_TOKEN=$token")
-            appendLine("set AITT_TAB_ID=$tabId")
-            appendLine("set AITT_TOOL=opencode")
-            appendLine(execCommand)
-        })
-
-        // The launcher injects the current tab's authentication and routing data into the OpenCode process environment.
-        Files.writeString(shFile, buildString {
-            appendLine("#!/usr/bin/env bash")
-            appendLine("export AITT_PORT=\"$port\"")
-            appendLine("export AITT_TOKEN=\"$token\"")
-            appendLine("export AITT_TAB_ID=\"$tabId\"")
-            appendLine("export AITT_TOOL=\"opencode\"")
-            appendLine("exec $execCommand")
-        })
-        setExecutableIfPosix(shFile)
-
-        return AiTurnHookInstaller.LauncherPaths(cmdPath = cmdFile, shPath = shFile)
+    ): AiTerminalLauncher.Paths {
+        val settings = AiTerminalToolsSettings.getInstance().getState()
+        return AiTerminalLauncher.write(
+            toolsDir = toolsDir,
+            toolName = "opencode",
+            tabId = tabId,
+            token = token,
+            port = port,
+            customCommand = settings.openCodeTerminalCommand,
+            defaultCommand = "opencode"
+        )
     }
 
     fun cleanupLauncherScripts(basePath: Path, tabId: String) {
-        val toolsDir = basePath.resolve(".idea").resolve("ai-terminal-tools")
-        try {
-            Files.deleteIfExists(toolsDir.resolve("run-opencode-$tabId.cmd"))
-            Files.deleteIfExists(toolsDir.resolve("run-opencode-$tabId.sh"))
-        } catch (_: Throwable) {
-        }
-    }
-
-    private fun setExecutableIfPosix(path: Path) {
-        try {
-            val perms = Files.getPosixFilePermissions(path).toMutableSet()
-            perms.add(PosixFilePermission.OWNER_EXECUTE)
-            perms.add(PosixFilePermission.GROUP_EXECUTE)
-            Files.setPosixFilePermissions(path, perms)
-        } catch (_: Throwable) {
-        }
+        AiTerminalLauncher.cleanup(
+            basePath.resolve(".idea").resolve("ai-terminal-tools"), "opencode", tabId
+        )
     }
 }

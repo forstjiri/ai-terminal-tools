@@ -7,7 +7,8 @@ import java.nio.file.Path
 /** AI terminal tool type */
 enum class AiTool {
     OPENCODE,
-    CLAUDE_CODE
+    CLAUDE_CODE,
+    PI,
 }
 
 /** Turn event type */

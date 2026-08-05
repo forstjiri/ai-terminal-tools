@@ -31,8 +31,10 @@ class AiTerminalToolsSettings : PersistentStateComponent<AiTerminalToolsSettings
         var commitMessageAiTool: String = "opencode"
         var commitMessageModel: String = ""
         var claudeCommitMessageModel: String = ""
+        var piCommitMessageModel: String = ""
         var openCodeTerminalCommand: String = ""
         var claudeCodeTerminalCommand: String = ""
+        var piTerminalCommand: String = ""
         var onTurnEndCommand: String = ""
         var appendChangesToNextMessage: Boolean = true
         var commitMessageAdditionalPrompt: String = ""

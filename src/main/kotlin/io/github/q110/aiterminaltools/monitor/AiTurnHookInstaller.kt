@@ -27,7 +27,7 @@ class AiTurnHookInstaller(
      * Install Claude Code hooks and generate launcher scripts.
      * Return launcher filenames (without paths, relative to .idea/ai-terminal-tools/).
      */
-    fun installClaudeHooks(basePath: Path, tabId: String, token: String, port: Int): LauncherPaths {
+    fun installClaudeHooks(basePath: Path, tabId: String, token: String, port: Int): AiTerminalLauncher.Paths {
         val validatedBasePath = ProjectBasePath.requireValid(basePath)
 
         // 1. Ensure the .idea/ai-terminal-tools/ directory exists
@@ -268,49 +268,24 @@ class AiTurnHookInstaller(
         tabId: String,
         token: String,
         port: Int
-    ): LauncherPaths {
-        val cmdFile = toolsDir.resolve("run-claude-$tabId.cmd")
-        val shFile = toolsDir.resolve("run-claude-$tabId.sh")
-        val customCommand = AiTerminalToolsSettings.getInstance().getState().claudeCodeTerminalCommand.trim()
-        val execCommand = customCommand.ifEmpty { "claude" }
-
-        // Windows cmd launcher
-        Files.writeString(cmdFile, buildString {
-            appendLine("@echo off")
-            appendLine("set AITT_PORT=$port")
-            appendLine("set AITT_TOKEN=$token")
-            appendLine("set AITT_TAB_ID=$tabId")
-            appendLine("set AITT_TOOL=claude")
-            appendLine(execCommand)
-        })
-
-        // macOS/Linux bash launcher
-        Files.writeString(shFile, buildString {
-            appendLine("#!/usr/bin/env bash")
-            appendLine("export AITT_PORT=\"$port\"")
-            appendLine("export AITT_TOKEN=\"$token\"")
-            appendLine("export AITT_TAB_ID=\"$tabId\"")
-            appendLine("export AITT_TOOL=\"claude\"")
-            appendLine("exec $execCommand")
-        })
-
-        setExecutableIfPosix(shFile)
-
-        return LauncherPaths(
-            cmdPath = cmdFile,
-            shPath = shFile
+    ): AiTerminalLauncher.Paths {
+        val settings = AiTerminalToolsSettings.getInstance().getState()
+        return AiTerminalLauncher.write(
+            toolsDir = toolsDir,
+            toolName = "claude",
+            tabId = tabId,
+            token = token,
+            port = port,
+            customCommand = settings.claudeCodeTerminalCommand,
+            defaultCommand = "claude"
         )
     }
 
     /** Clean up launcher scripts for the specified tabId */
     fun cleanupLauncherScripts(basePath: Path, tabId: String) {
-        val toolsDir = basePath.resolve(".idea").resolve("ai-terminal-tools")
-        try {
-            Files.deleteIfExists(toolsDir.resolve("run-claude-$tabId.cmd"))
-            Files.deleteIfExists(toolsDir.resolve("run-claude-$tabId.sh"))
-        } catch (exception: Throwable) {
-            log.warn("Failed to cleanup launcher scripts for tab $tabId", exception)
-        }
+        AiTerminalLauncher.cleanup(
+            basePath.resolve(".idea").resolve("ai-terminal-tools"), "claude", tabId
+        )
     }
 
     private fun setExecutableIfPosix(path: Path) {
@@ -329,9 +304,4 @@ class AiTurnHookInstaller(
     private fun isWindows(): Boolean {
         return System.getProperty("os.name", "").lowercase().contains("win")
     }
-
-    data class LauncherPaths(
-        val cmdPath: Path,
-        val shPath: Path
-    )
 }
