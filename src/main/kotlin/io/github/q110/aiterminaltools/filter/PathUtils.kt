@@ -57,16 +57,6 @@ internal fun isPathReference(reference: String): Boolean {
     return reference.contains('/')
 }
 
-/** Check whether two ranges overlap (for deduplicating fileLinks) */
-internal fun rangesOverlap(range: IntRange, ranges: List<IntRange>): Boolean {
-    return ranges.any { range.first <= it.last && range.last >= it.first }
-}
-
-/** Truncate long text for notification display */
-internal fun shortStatusText(text: String): String {
-    return if (text.length > 80) text.take(77) + "..." else text
-}
-
 /** Normalize paths: unify slashes and remove whitespace and trailing punctuation */
 internal fun normalizePath(path: String): String {
     return path.replace('\\', '/').trim().trimEnd('.', ',', ';', ':', ')', ']', '}')

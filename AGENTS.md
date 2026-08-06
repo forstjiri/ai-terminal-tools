@@ -6,7 +6,7 @@ This plugin mainly does five things:
 
 1. Opens and manages AI terminal tabs for `OpenCode` and `Claude Code`.
 2. Sends selected text or `@path` references from the IDE into the active AI terminal.
-3. Turns terminal/console output into clickable file links and click-to-copy links.
+3. Adds orange overlay-diamond file links to reworked/frontend terminal editors and supports click-to-copy links in classic terminals.
 4. Monitors AI turns, captures file snapshots, and shows diffs after a turn finishes.
 5. Generates commit messages from selected changes in the Commit panel.
 
@@ -27,6 +27,10 @@ This plugin mainly does five things:
 - `AiTerminalBridgeService.kt`
   Main bridge service.
   Creates AI terminal tabs, detects the active terminal, sends text into it, tracks AI terminals, and coordinates terminal integration.
+
+- `AiTerminalFileLinkService.kt`
+  Scans reworked/frontend terminal editors and adds orange overlay diamonds for file references.
+  Uses `FilterPatterns` and `PathUtils` for matching and resolution, with the jump hyperlink handlers for navigation.
 
 - `FrontendTerminalHelper.kt`
   Adapter for newer IntelliJ terminal APIs.
@@ -60,18 +64,11 @@ This plugin mainly does five things:
 
 ### `filter/`
 
-- `AiTerminalToolsFilterProvider.kt`
-  Factory/provider for the main console filter.
-
-- `AiTerminalToolsFilter.kt`
-  Parses terminal and console output.
-  Detects file references, `@path` references, and copyable tokens, then turns them into clickable links.
-
 - `FilterPatterns.kt`
-  Contains regex patterns used by the filter layer.
+  Contains regex patterns used by terminal file-link scanning.
 
 - `PathUtils.kt`
-  Path normalization and resolution helpers used by the filter and jump logic.
+  Path normalization and resolution helpers used by terminal file links and jump logic.
 
 ### `jump/`
 
@@ -83,11 +80,6 @@ This plugin mainly does five things:
 
 - `FileChoiceDialog.kt`
   Lets the user choose the correct file when one reference matches multiple candidates.
-
-### `copy/`
-
-- `CopyTextHyperlinkInfo.kt`
-  Copies clicked text into the clipboard and shows a short confirmation balloon.
 
 ### `console/`
 
@@ -138,4 +130,4 @@ This plugin mainly does five things:
 3. The AI terminal runs with `AITT_*` environment variables so it can report back to the correct IDE project/tab.
 4. When the AI starts editing files, the plugin captures before-snapshots.
 5. When the turn ends, the plugin compares before/after snapshots and shows a diff.
-6. Separately, the plugin enhances terminal and console output with clickable links, copy actions, and send-to-AI helpers.
+6. Separately, reworked/frontend terminal editors receive orange overlay diamonds for file references, while terminal drag-and-drop and click-to-copy helpers remain available.

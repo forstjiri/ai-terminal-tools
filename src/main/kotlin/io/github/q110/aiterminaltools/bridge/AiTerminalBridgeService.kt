@@ -576,8 +576,14 @@ class AiTerminalBridgeService(
     private fun registerAiTerminal(terminal: TargetTerminal, tool: AiTool) {
         when (terminal) {
             is TargetTerminal.Classic -> aiClassicTerminals[terminal.widget] = tool
-            is TargetTerminal.LegacyReworked -> aiLegacyReworkedTerminals[terminal.widget] = tool
-            is TargetTerminal.Frontend -> aiFrontendTerminals[terminal.tab] = tool
+            is TargetTerminal.LegacyReworked -> {
+                aiLegacyReworkedTerminals[terminal.widget] = tool
+                project.service<AiTerminalFileLinkService>().setupWidget(terminal.widget)
+            }
+            is TargetTerminal.Frontend -> {
+                aiFrontendTerminals[terminal.tab] = tool
+                project.service<AiTerminalFileLinkService>().setupFrontendTab(terminal.tab)
+            }
         }
         project.service<AiTerminalDropService>().refreshDropTarget()
     }

@@ -11,6 +11,7 @@ src/main/kotlin/io/github/q110/aiterminaltools/
 |
 ├── bridge/                                # Terminal interaction, context menus, drag-and-drop
 │   ├── AiTerminalBridgeService.kt         # Core bridge service for terminal input injection
+│   ├── AiTerminalFileLinkService.kt        # Orange overlay-diamond file links in terminal editors
 │   ├── FrontendTerminalHelper.kt          # New frontend terminal helper
 │   ├── LegacyReworkedTerminalHelper.kt    # Legacy Reworked terminal helper
 │   ├── SendSelectionToAiTerminalAction.kt # Action: send selected code to AI terminal
@@ -21,10 +22,8 @@ src/main/kotlin/io/github/q110/aiterminaltools/
 │   ├── AiTerminalDropService.kt           # Drag-and-drop service for terminal path sending
 │   └── AiTerminalToolsMenuRegistrar.kt    # Startup activity that registers context menu actions
 |
-├── filter/                                # Output filtering for jump/copy links
-│   ├── AiTerminalToolsFilter.kt           # Core filter for jump and copy links
-│   ├── AiTerminalToolsFilterProvider.kt   # Registers the core filter for consoles/terminals
-│   ├── FilterPatterns.kt                  # Regex constants for file refs, @paths, and copy patterns
+├── filter/                                # File-reference matching and path utilities
+│   ├── FilterPatterns.kt                  # Regex constants for file refs and @paths
 │   └── PathUtils.kt                       # Path utilities
 |
 ├── jump/                                  # File and folder hyperlink handlers
@@ -57,6 +56,10 @@ src/main/kotlin/io/github/q110/aiterminaltools/
 - Legacy Reworked: IDE 2025.1 to 2025.2 uses reflection against the older Reworked Terminal API.
 - OpenCode: IDE 2025.1 to 2025.2 falls back to Classic Terminal to avoid Reworked rendering issues.
 - Classic: fallback path using `ShellTerminalWidget` and TTY Connector.
+
+## Terminal File Links
+
+`AiTerminalFileLinkService` scans reworked/frontend terminal editor documents, matches file and `@path` references with `FilterPatterns`, resolves them through `PathUtils`, and adds orange overlay-diamond `JLabel` markers. Clicking a marker uses the jump hyperlink handlers.
 
 ## AI Turn Diff Integration
 

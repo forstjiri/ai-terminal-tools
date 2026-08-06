@@ -37,22 +37,17 @@ internal class FileReferenceHyperlinkInfo(
             )
 
             if (editor != null) {
-                val document = editor.document
-                val startOffset: Int
-                val endOffset: Int
                 if (hasLineNumber) {
+                    val document = editor.document
                     val startLine = (lineNumber - 1).coerceIn(0, document.lineCount - 1)
                     val endLine = ((endLineNumber ?: lineNumber) - 1).coerceIn(startLine, document.lineCount - 1)
-                    startOffset = document.getLineStartOffset(startLine)
-                    endOffset = document.getLineEndOffset(endLine)
-                } else {
-                    startOffset = 0
-                    endOffset = document.textLength
-                }
+                    val startOffset = document.getLineStartOffset(startLine)
+                    val endOffset = document.getLineEndOffset(endLine)
 
-                editor.selectionModel.setSelection(startOffset, endOffset)
-                editor.caretModel.moveToOffset(startOffset)
-                editor.scrollingModel.scrollToCaret(ScrollType.CENTER)
+                    editor.selectionModel.setSelection(startOffset, endOffset)
+                    editor.caretModel.moveToOffset(startOffset)
+                    editor.scrollingModel.scrollToCaret(ScrollType.CENTER)
+                }
             }
         }
     }

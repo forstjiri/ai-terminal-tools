@@ -12,6 +12,7 @@
         <applicationService serviceImplementation="io.github.q110.aiterminaltools.settings.AiTerminalToolsSettings"/>
         <projectService serviceImplementation="io.github.q110.aiterminaltools.bridge.AiTerminalBridgeService"/>
         <projectService serviceImplementation="io.github.q110.aiterminaltools.bridge.AiTerminalDropService"/>
+        <projectService serviceImplementation="io.github.q110.aiterminaltools.bridge.AiTerminalFileLinkService"/>
         <projectService serviceImplementation="io.github.q110.aiterminaltools.console.AiConsoleErrorInlayService"/>
         <projectService serviceImplementation="io.github.q110.aiterminaltools.monitor.AiTurnMonitorService"/>
         <projectService serviceImplementation="io.github.q110.aiterminaltools.monitor.AiTurnEventServer"/>
@@ -22,7 +23,6 @@
             instance="io.github.q110.aiterminaltools.settings.AiTerminalToolsConfigurable"
             id="io.github.q110.aiterminaltools.settings.AiTerminalToolsConfigurable"
             displayName="Opencode / Claude TUI integration"/>
-        <consoleFilterProvider implementation="io.github.q110.aiterminaltools.filter.AiTerminalToolsFilterProvider"/>
         <intentionAction>
             <className>io.github.q110.aiterminaltools.bridge.SendDiagnosticToAiTerminalAction</className>
             <language>any</language>

@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.github.forstjiri"
-version = "0.5.0"
+version = "0.5.6"
 
 kotlin {
     jvmToolchain(25)
