@@ -44,8 +44,8 @@ internal class FileReferenceHyperlinkInfo(
                     val startOffset = document.getLineStartOffset(startLine)
                     val endOffset = document.getLineEndOffset(endLine)
 
-                    editor.selectionModel.setSelection(startOffset, endOffset)
                     editor.caretModel.moveToOffset(startOffset)
+                    editor.selectionModel.setSelection(startOffset, endOffset)
                     editor.scrollingModel.scrollToCaret(ScrollType.CENTER)
                 }
             }

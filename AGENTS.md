@@ -2,11 +2,11 @@
 
 ## Plugin Overview
 
-This plugin mainly does five things:
+This plugin provides five main capabilities:
 
-1. Opens and manages AI terminal tabs for `OpenCode` and `Claude Code`.
-2. Sends selected text or `@path` references from the IDE into the active AI terminal.
-3. Adds orange overlay-diamond file links to reworked/frontend terminal editors and supports click-to-copy links in classic terminals.
+1. Opens and manages AI terminal tabs for OpenCode, Claude Code, and Pi.
+2. Sends selected text, diagnostics, console errors, and `@path` references from the IDE into an active AI terminal.
+3. Adds orange overlay-diamond file links to frontend/reworked terminal editors.
 4. Monitors AI turns, captures file snapshots, and shows diffs after a turn finishes.
 5. Generates commit messages from selected changes in the Commit panel.
 
@@ -14,120 +14,68 @@ This plugin mainly does five things:
 
 ### `settings/`
 
-- `AiTerminalToolsSettings.kt`
-  Stores plugin settings in `ai-terminal-tools.xml`.
-  Holds flags for file links, copy links, drag-to-terminal, commit message tool/model/prompt, extra file extensions, and custom terminal start commands.
-
-- `AiTerminalToolsConfigurable.kt`
-  Renders the Settings UI in the IDE.
-  Reads and writes all plugin options through `AiTerminalToolsSettings`.
+- `AiTerminalToolsSettings.kt` stores persistent plugin settings, including file links, console icons, drag-and-drop, commit-message tool/model/prompt, startup commands, and post-turn commands.
+- `AiTerminalToolsConfigurable.kt` renders and applies the Settings UI.
 
 ### `bridge/`
 
-- `AiTerminalBridgeService.kt`
-  Main bridge service.
-  Creates AI terminal tabs, detects the active terminal, sends text into it, tracks AI terminals, and coordinates terminal integration.
+- `AiTerminalBridgeService.kt` is the central project service. It creates OpenCode, Claude Code, and Pi terminal tabs, detects active terminals, injects input, and coordinates monitoring.
+- `AbstractStartAiTerminalAction.kt` and the `Start*Action.kt` classes implement the three terminal start actions.
+- `AiCliRunner.kt` runs OpenCode, Claude Code, and Pi for query and commit-message workflows.
+- `AbstractSelectionAiAction.kt` is the base for AI selection actions.
+- `ExplainSelectionWithAiAction.kt` explains selected code.
+- `ModifySelectionWithAiAction.kt` replaces selected code with an AI-generated modification.
+- `SendSelectionToAiTerminalAction.kt` sends selected editor text with file and line context.
+- `SendPathToAiTerminalAction.kt` sends selected files/folders as `@path` references.
+- `SendDiagnosticToAiTerminalAction.kt` sends the diagnostic under the caret.
+- `DiagnosticPayload.kt` formats diagnostic payloads.
+- `GenerateCommitMessageAction.kt` builds a selected-change summary and writes the generated message into the Commit panel.
+- `AiTerminalFileLinkService.kt` scans terminal documents and adds clickable file-reference overlays using `FilterPatterns` and `PathUtils`.
+- `AiTerminalDropService.kt` sends dragged files/folders as `@path` references.
+- `FrontendTerminalHelper.kt` adapts newer terminal APIs through reflection.
+- `LegacyReworkedTerminalHelper.kt` adapts older/reworked terminal APIs through reflection.
+- `AiTerminalToolsMenuRegistrar.kt` registers plugin actions in IDE menus and toolbars.
 
-- `AiTerminalFileLinkService.kt`
-  Scans reworked/frontend terminal editors and adds orange overlay diamonds for file references.
-  Uses `FilterPatterns` and `PathUtils` for matching and resolution, with the jump hyperlink handlers for navigation.
+### `filter/` and `jump/`
 
-- `FrontendTerminalHelper.kt`
-  Adapter for newer IntelliJ terminal APIs.
-  Opens tabs, runs commands, and injects input into frontend terminals.
-
-- `LegacyReworkedTerminalHelper.kt`
-  Adapter for older/reworked terminal APIs.
-  Provides the same basic operations for older terminal implementations.
-
-- `StartOpenCodeAction.kt`
-  Action that opens an OpenCode terminal.
-
-- `StartClaudeCodeAction.kt`
-  Action that opens a Claude Code terminal.
-
-- `SendSelectionToAiTerminalAction.kt`
-  Sends the current editor selection to the active AI terminal, including file path and line info.
-
-- `SendPathToAiTerminalAction.kt`
-  Sends an `@path` reference for the selected file or folder to the active AI terminal.
-
-- `GenerateCommitMessageAction.kt`
-  Collects the selected commit changes, builds a diff summary, runs `opencode` or `claude`, and writes the generated commit message back into the Commit panel.
-
-- `AiTerminalToolsMenuRegistrar.kt`
-  Registers plugin actions into editor, project view, console, diff, and toolbar menus on startup.
-
-- `AiTerminalDropService.kt`
-  Lets users drag files/folders into terminal tabs and send them as `@path` references.
-  Also handles some click-to-copy behavior for classic terminals.
-
-### `filter/`
-
-- `FilterPatterns.kt`
-  Contains regex patterns used by terminal file-link scanning.
-
-- `PathUtils.kt`
-  Path normalization and resolution helpers used by terminal file links and jump logic.
-
-### `jump/`
-
-- `FileReferenceHyperlinkInfo.kt`
-  Opens a file at the matched line or line range when a file reference is clicked.
-
-- `FolderReferenceHyperlinkInfo.kt`
-  Selects and expands a folder in Project View.
-
-- `FileChoiceDialog.kt`
-  Lets the user choose the correct file when one reference matches multiple candidates.
+- `FilterPatterns.kt` defines file-reference and `@path` regular expressions.
+- `PathUtils.kt` normalizes paths and resolves project files.
+- `FileReferenceHyperlinkInfo.kt` opens files at matched lines or line ranges.
+- `FolderReferenceHyperlinkInfo.kt` selects and expands folders in Project View.
+- `FileChoiceDialog.kt` resolves ambiguous file matches.
 
 ### `console/`
 
-- `ConsoleErrorBlockParser.kt`
-  Parses Run/Debug console output and detects error or stack-trace blocks.
-
-- `AiConsoleErrorInlayService.kt`
-  Adds an inline action icon near detected error blocks so they can be sent to the AI terminal.
+- `ConsoleErrorBlockParser.kt` recognizes error and stack-trace blocks in Run/Debug output.
+- `AiConsoleErrorInlayService.kt` adds an inline send action beside detected console errors.
 
 ### `monitor/`
 
-- `AiTurnModels.kt`
-  Shared data models for AI turn monitoring: tools, events, snapshots, terminal context, and turn state.
-
-- `AiTurnMonitorService.kt`
-  Central turn-monitoring service.
-  Registers AI tabs, processes turn events, captures snapshots, and decides when to show diffs.
-
-- `AiTurnSnapshotService.kt`
-  Captures file snapshots before AI-driven edits.
-  Handles text/binary detection and file size limits.
-
-- `AiTurnEventServer.kt`
-  Local HTTP server on `127.0.0.1` that receives events from Claude hooks and the OpenCode plugin.
-
-- `AiTurnDiffPresenter.kt`
-  Builds IntelliJ diff requests from before/after snapshots and opens the diff UI.
-  Also remembers the last completed AI turn.
-
-- `AiTurnDiffDialog.kt`
-  Standalone diff window with file selection.
-
-- `AiTurnHookInstaller.kt`
-  Generates Claude hook scripts and Claude launcher scripts.
-  Injects `AITT_*` environment variables and optionally uses a custom Claude start command.
-
-- `AiTurnOpenCodeInstaller.kt`
-  Generates the OpenCode JS plugin and OpenCode launcher scripts.
-  The JS plugin sends session/file events back to the IDE; the launcher injects `AITT_*` environment variables and can use a custom OpenCode start command.
-
-- `ShowLastAiTurnDiffAction.kt`
-  Reopens the diff for the most recent completed AI turn.
+- `AiTurnModels.kt` contains shared models for tools, events, turns, snapshots, and terminal contexts.
+- `AiTurnEventServer.kt` runs a local HTTP server on `127.0.0.1` for Claude hooks, the OpenCode plugin, and the Pi extension.
+- `AiTurnMonitorService.kt` registers AI tabs, processes events, captures snapshots, and decides when to show diffs.
+- `AiTurnSnapshotService.kt` captures text/binary file snapshots before AI edits, with size limits.
+- `AiTurnDiffPresenter.kt` builds IntelliJ diff requests, remembers the latest completed turn, and supports reverting changes.
+- `AiTurnDiffDialog.kt` displays changed files in a standalone multi-file dialog.
+- `AiTerminalLauncher.kt` generates per-terminal `.cmd` and `.sh` launchers with `AITT_*` variables.
+- `AiTurnHookInstaller.kt` generates Claude Code hooks and launchers.
+- `AiTurnOpenCodeInstaller.kt` generates the project-level OpenCode JavaScript plugin and launchers.
+- `AiTurnPiInstaller.kt` generates the project-level Pi TypeScript extension and launchers.
+- `ShowLastAiTurnDiffAction.kt` reopens the most recent completed AI turn diff.
 
 ## End-to-End Flow
 
-1. The user opens an OpenCode or Claude Code terminal through the plugin.
-2. The plugin creates launcher scripts and, when needed, hook/plugin integration files.
-3. The AI terminal runs with `AITT_*` environment variables so it can report back to the correct IDE project/tab.
-4. When the AI starts editing files, the plugin captures before-snapshots.
-5. When the turn ends, the plugin compares before/after snapshots and shows a diff.
-6. Separately, reworked/frontend terminal editors receive orange overlay diamonds for file references, while terminal drag-and-drop and click-to-copy helpers remain available.
+1. The user starts OpenCode, Claude Code, or Pi through the plugin.
+2. The plugin creates a launcher and installs the tool-specific integration when needed:
+   - OpenCode: `.opencode/plugins/ai-terminal-tools.js`
+   - Claude Code: `.claude/settings.local.json` hooks
+   - Pi: `.pi/extensions/ai-terminal-tools.ts`
+3. The launcher injects `AITT_*` environment variables so callbacks are associated with the correct project and terminal tab.
+4. When an AI turn begins, the monitor captures before-snapshots for files reported by the tool.
+5. When the turn ends, current files are compared with snapshots and a diff is shown if content changed.
+6. Independently, terminal and console output can provide clickable file links, and IDE selections, diagnostics, errors, and dropped paths can be sent to the active AI terminal.
+
+## Maintenance Notes
+
+- Keep README, `docs/ARCHITECTURE.md`, plugin metadata, and this file synchronized when adding a supported AI CLI.
+- Generated launcher files and tool integrations are created under the project `.idea`, `.opencode`, `.claude`, or `.pi` directories at runtime; they should not be committed.

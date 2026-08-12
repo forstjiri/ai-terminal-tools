@@ -1,6 +1,6 @@
 <idea-plugin require-restart="true">
     <id>io.github.forstjiri.aiterminaltool</id>
-    <name>Opencode / Claude TUI integration</name>
+    <name>OpenCode / Claude Code / Pi TUI integration</name>
     <vendor>forstjiri</vendor>
 
     <depends>com.intellij.modules.platform</depends>
@@ -22,7 +22,7 @@
             parentId="tools"
             instance="io.github.q110.aiterminaltools.settings.AiTerminalToolsConfigurable"
             id="io.github.q110.aiterminaltools.settings.AiTerminalToolsConfigurable"
-            displayName="Opencode / Claude TUI integration"/>
+            displayName="OpenCode / Claude Code / Pi TUI integration"/>
         <intentionAction>
             <className>io.github.q110.aiterminaltools.bridge.SendDiagnosticToAiTerminalAction</className>
             <language>any</language>
