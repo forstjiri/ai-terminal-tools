@@ -107,6 +107,7 @@ class AiTurnEventServer(
             "claude" -> AiTool.CLAUDE_CODE
             "opencode" -> AiTool.OPENCODE
             "pi" -> AiTool.PI
+            "codex" -> AiTool.CODEX
             else -> return null
         }
 

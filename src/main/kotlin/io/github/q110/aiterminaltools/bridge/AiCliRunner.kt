@@ -22,6 +22,7 @@ internal object AiCliRunner {
     const val OPENCODE_TIMEOUT_SECONDS = 120L
     const val CLAUDE_TIMEOUT_SECONDS = 120L
     const val PI_TIMEOUT_SECONDS = 120L
+    const val CODEX_TIMEOUT_SECONDS = 120L
     private const val PROCESS_POLL_INTERVAL_MS = 200L
     val ANSI_PATTERN = Regex("\\u001B\\[[;?0-9]*[ -/]*[@-~]")
 
@@ -29,6 +30,7 @@ internal object AiCliRunner {
         return when (aiTool) {
             "claude" -> "claude"
             "pi" -> "pi"
+            "codex" -> "codex"
             else -> "opencode"
         }
     }
@@ -37,6 +39,7 @@ internal object AiCliRunner {
         return when (aiTool) {
             "claude" -> "Claude Code"
             "pi" -> "Pi"
+            "codex" -> "Codex"
             else -> "OpenCode"
         }
     }
@@ -169,6 +172,8 @@ internal object AiCliRunner {
         return "claude"
     }
 
+    fun codexCommand(): String = if (SystemInfo.isWindows) "codex.cmd" else "codex"
+
     fun shellQuote(value: String): String {
         return if (SystemInfo.isWindows) {
             "'${value.replace("'", "''")}'"
@@ -261,6 +266,19 @@ internal object AiCliRunner {
         return result.output
     }
 
+    fun runCodexQuery(prompt: String, basePath: Path): String {
+        val settings = AiTerminalToolsSettings.getInstance().getState()
+        val command = mutableListOf(codexCommand(), "exec", "--color", "never")
+        val model = settings.codexCommitMessageModel.trim()
+        if (model.isNotEmpty()) command += listOf("--model", model)
+        command += prompt
+        val result = runProcess(command, basePath, CODEX_TIMEOUT_SECONDS)
+        if (result.exitCode != 0) {
+            throw AiCliException(extractErrorMessage("Codex", result.output))
+        }
+        return result.output
+    }
+
     fun runOpencodeQuery(
         prompt: String,
         basePath: Path,
@@ -348,6 +366,7 @@ internal object AiCliRunner {
         return when (aiTool) {
             "claude" -> runClaudeQuery(prompt, basePath)
             "pi" -> runPiQuery(prompt, basePath)
+            "codex" -> runCodexQuery(prompt, basePath)
             else -> runOpencodeQuery(prompt, basePath, project, indicator, showTerminal)
         }
     }

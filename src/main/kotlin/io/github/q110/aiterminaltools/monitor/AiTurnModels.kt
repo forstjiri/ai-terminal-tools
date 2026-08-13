@@ -9,6 +9,7 @@ enum class AiTool {
     OPENCODE,
     CLAUDE_CODE,
     PI,
+    CODEX,
 }
 
 /** Turn event type */

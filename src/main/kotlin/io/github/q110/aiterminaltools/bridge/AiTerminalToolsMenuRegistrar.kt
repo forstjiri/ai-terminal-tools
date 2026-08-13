@@ -31,6 +31,7 @@ class AiTerminalToolsMenuRegistrar : StartupActivity, DumbAware {
         registerToolbarAction(actionManager, "AiTerminalTools.StartOpenCode")
         registerToolbarAction(actionManager, "AiTerminalTools.StartClaudeCode")
         registerToolbarAction(actionManager, "AiTerminalTools.StartPi")
+        registerToolbarAction(actionManager, "AiTerminalTools.StartCodex")
     }
 
     /** Inserts the action at the beginning of the menu group using Constraints.FIRST. */

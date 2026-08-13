@@ -1,4 +1,4 @@
-# OpenCode / Claude Code / Pi TUI integration
+# OpenCode / Claude Code / Pi / Codex TUI integration
 
 A JetBrains IDE plugin for terminal, console, and Commit panel workflows. Forked from [Q-110/ai-terminal-tools](https://github.com/Q-110/ai-terminal-tools) with enhancements and new functionality. 
 
@@ -18,15 +18,15 @@ A JetBrains IDE plugin for terminal, console, and Commit panel workflows. Forked
 Requirements:
 
 - JetBrains IDE 2025.1+
-- At least one supported AI CLI installed: OpenCode (`opencode`), Claude Code (`claude`), or Pi (`pi`) available on `PATH`
+- At least one supported AI CLI installed: OpenCode (`opencode`), Claude Code (`claude`), Pi (`pi`), or Codex (`codex`) available on `PATH`
 - JDK 17 and Gradle Wrapper for local development or plugin builds
 
 Workflow:
 
-1. Click "Start OpenCode", "Start Claude Code", or "Start Pi" in the IDE toolbar.
+1. Click "Start OpenCode", "Start Claude Code", "Start Pi", or "Start Codex" in the IDE toolbar.
 2. The plugin reuses an existing terminal tab for the same tool if one is open, or creates a new tab. It injects the `AITT_*` environment and runs the selected CLI, then automatically activates the terminal.
 3. Send selections from editors, consoles, diffs, or read-only viewers, or send file paths from the project view, editor tabs, or the Commit panel.
-4. AI Turn Diff automatically tracks real file content changes in plugin-started OpenCode, Claude Code, and Pi terminals and opens a diff window when changes are detected.
+4. AI Turn Diff automatically tracks real file content changes in plugin-started OpenCode, Claude Code, Pi, and Codex terminals and opens a diff window when changes are detected.
 
 > AI Turn Diff only auto-attaches to terminals started from the plugin buttons. Manually started terminals can still receive selection and path sends, but they will not get the turn-tracking integration.
 
@@ -59,7 +59,7 @@ Resolution rules:
 
 ### AI Terminal Sending
 
-Send editor selections, file paths, or console errors into the active terminal input area. The target terminal can be OpenCode, Claude Code, or Pi.
+Send editor selections, file paths, or console errors into the active terminal input area. The target terminal can be OpenCode, Claude Code, Pi, or Codex.
 
 - Shortcut: `Ctrl+Alt+,`
 - Context menus:
@@ -88,14 +88,15 @@ Supported sources include JVM, Python, JavaScript/Node.js, TypeScript, Go, Rust,
 
 ### AI Turn Diff
 
-When OpenCode, Claude Code, or Pi is started through the plugin, the plugin tracks each AI turn's file modifications and opens a diff when the content actually changes.
+When OpenCode, Claude Code, Pi, or Codex is started through the plugin, the plugin tracks each AI turn's file modifications and opens a diff when the content actually changes.
 
 - The before-side of the diff is read-only; the after-side shows the current file state.
 - OpenCode: generates a project-level `.opencode/plugins/ai-terminal-tools.js` and a per-terminal launcher.
 - Claude Code: generates `.claude/settings.local.json` hooks and a per-terminal launcher.
 - Pi: generates a project-level `.pi/extensions/ai-terminal-tools.ts` extension and a per-terminal launcher.
+- Codex: generates a per-terminal launcher that passes a `notify` configuration override. Its completion callback compares a project-file snapshot because Codex notifications do not identify individual file writes.
 - Diff state is isolated by `tabId` and upstream session ID.
-- You can reopen the last diff from Tools -> OpenCode / Claude Code / Pi TUI integration -> Show Last AI Turn Diff.
+- You can reopen the last diff from Tools -> OpenCode / Claude Code / Pi / Codex TUI integration -> Show Last AI Turn Diff.
 
 ### Terminal Tab Reuse
 
@@ -107,7 +108,7 @@ Available settings:
 
 - Enable console error send icon
 - Enable drag-and-drop files/folders to AI Terminal
-- Commit message AI tool (OpenCode, Claude Code, or Pi)
+- Commit message AI tool (OpenCode, Claude Code, Pi, or Codex)
 - Commit message model (full model name with provider prefix)
 - Commit message additional prompt
 - On turn end command (shell command run after each AI turn completes)

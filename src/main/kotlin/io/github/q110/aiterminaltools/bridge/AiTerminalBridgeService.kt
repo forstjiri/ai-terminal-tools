@@ -25,6 +25,7 @@ import io.github.q110.aiterminaltools.monitor.AiTurnEventServer
 import io.github.q110.aiterminaltools.monitor.AiTurnHookInstaller
 import io.github.q110.aiterminaltools.monitor.AiTurnOpenCodeInstaller
 import io.github.q110.aiterminaltools.monitor.AiTurnPiInstaller
+import io.github.q110.aiterminaltools.monitor.AiTurnCodexInstaller
 import io.github.q110.aiterminaltools.monitor.AiTurnMonitorService
 import io.github.q110.aiterminaltools.settings.AiTerminalToolsSettings
 import org.jetbrains.plugins.terminal.ShellStartupOptions
@@ -55,9 +56,10 @@ class AiTerminalBridgeService(
     private val openCodeTerminalStartInProgress = AtomicBoolean(false)
     private val claudeCodeTerminalStartInProgress = AtomicBoolean(false)
     private val piTerminalStartInProgress = AtomicBoolean(false)
-    private val aiFrontendTerminals: MutableMap<Any, AiTool> = Collections.synchronizedMap(IdentityHashMap())
-    private val aiLegacyReworkedTerminals: MutableMap<TerminalWidget, AiTool> = Collections.synchronizedMap(IdentityHashMap())
-    private val aiClassicTerminals: MutableMap<TerminalWidget, AiTool> = Collections.synchronizedMap(IdentityHashMap())
+    private val codexTerminalStartInProgress = AtomicBoolean(false)
+    private val aiFrontendTerminals: MutableMap<Any, AiTerminalRegistration> = Collections.synchronizedMap(IdentityHashMap())
+    private val aiLegacyReworkedTerminals: MutableMap<TerminalWidget, AiTerminalRegistration> = Collections.synchronizedMap(IdentityHashMap())
+    private val aiClassicTerminals: MutableMap<TerminalWidget, AiTerminalRegistration> = Collections.synchronizedMap(IdentityHashMap())
 
     /** Writes directly to the active AI terminal input. */
     fun sendDirectInput(payload: String, dataContext: DataContext, settleAtLineEnd: Boolean = false): BridgeResult {
@@ -115,13 +117,15 @@ class AiTerminalBridgeService(
 
     internal fun unregisterAiTerminalContent(content: Content) {
         frontendHelper?.let { helper ->
-            aiFrontendTerminals.keys.removeAll { isFrontendContentOf(helper, it, content) }
+            aiFrontendTerminals.keys
+                .filter { isFrontendContentOf(helper, it, content) }
+                .forEach { tab -> aiFrontendTerminals.remove(tab)?.let(::unregisterAiTerminal) }
         }
 
         val widget = TerminalToolWindowManager.findWidgetByContent(content)
         if (widget != null) {
-            aiLegacyReworkedTerminals.remove(widget)
-            aiClassicTerminals.remove(widget)
+            aiLegacyReworkedTerminals.remove(widget)?.let(::unregisterAiTerminal)
+            aiClassicTerminals.remove(widget)?.let(::unregisterAiTerminal)
         }
     }
 
@@ -167,6 +171,19 @@ class AiTerminalBridgeService(
             return BridgeResult.Success
         }
         schedulePiTerminalStart(virtualFileHint)
+        return BridgeResult.Scheduled
+    }
+
+    /** Creates a new Codex terminal and starts codex. */
+    fun startCodexTerminal(virtualFileHint: VirtualFile? = null): BridgeResult {
+        if (!codexTerminalStartInProgress.compareAndSet(false, true)) return BridgeResult.Scheduled
+        val existing = findExistingTerminal(AiTool.CODEX)
+        if (existing != null) {
+            activateTerminal(existing)
+            codexTerminalStartInProgress.set(false)
+            return BridgeResult.Success
+        }
+        scheduleCodexTerminalStart(virtualFileHint)
         return BridgeResult.Scheduled
     }
 
@@ -340,6 +357,44 @@ class AiTerminalBridgeService(
         )
     }
 
+    private fun scheduleCodexTerminalStart(virtualFileHint: VirtualFile?) {
+        val workingDirectory = try {
+            ProjectBasePath.resolveTerminalExecutionRoot(project, virtualFileHint)
+        } catch (exception: Throwable) {
+            codexTerminalStartInProgress.set(false)
+            notify(project, exception.message.orEmpty(), NotificationType.WARNING)
+            return
+        }
+        val tabId = UUID.randomUUID().toString()
+        val token = generateSecureToken()
+        val port = try {
+            project.service<AiTurnEventServer>().ensureStarted()
+        } catch (exception: Throwable) {
+            log.error("Failed to start AiTurnEventServer", exception)
+            codexTerminalStartInProgress.set(false)
+            notify(project, "Failed to start the AI Turn Event Server: ${exception.message}", NotificationType.WARNING)
+            return
+        }
+        val launcherCommand = try {
+            val paths = AiTurnCodexInstaller(project).installCodexNotifier(workingDirectory, tabId, token, port)
+            if (isWindows()) paths.cmdPath.toString() else paths.shPath.toString()
+        } catch (exception: Throwable) {
+            log.error("Failed to install Codex notifier", exception)
+            codexTerminalStartInProgress.set(false)
+            notify(project, "Failed to configure Codex turn tracking: ${exception.message}", NotificationType.WARNING)
+            return
+        }
+        project.service<AiTurnMonitorService>().registerTab(
+            AiTerminalTabContext(tabId, token, AiTool.CODEX, workingDirectory, System.currentTimeMillis())
+        )
+        scheduleTerminalStart(
+            tabName = nextTerminalTabName(CODEX_TAB_NAME), command = launcherCommand,
+            toolName = CODEX_TAB_NAME, tool = AiTool.CODEX, inProgress = codexTerminalStartInProgress,
+            projectPath = workingDirectory, tabId = tabId,
+            cleanup = { AiTurnCodexInstaller(project).cleanupLauncherScripts(workingDirectory, tabId) }
+        )
+    }
+
     private fun scheduleTerminalStart(
         tabName: String, command: String, toolName: String, tool: AiTool, inProgress: AtomicBoolean,
         projectPath: Path, tabId: String, cleanup: () -> Unit
@@ -374,14 +429,15 @@ class AiTerminalBridgeService(
                                 return@invokeLater
                             }
                             val workingDirectoryString = workingDirectory.toString()
-                            val result = startFrontendTerminal(tabName, workingDirectoryString, command, toolName, tool)
+                            val registration = AiTerminalRegistration(tool, tabId, cleanup)
+                            val result = startFrontendTerminal(tabName, workingDirectoryString, command, toolName, registration)
                                 ?: if (shouldSkipLegacyReworkedTerminal(toolName)) {
-                                    startClassicTerminal(tabName, workingDirectoryString, command, toolName, tool)
+                                    startClassicTerminal(tabName, workingDirectoryString, command, toolName, registration)
                                 } else {
-                                    startLegacyReworkedTerminal(tabName, workingDirectoryString, command, toolName, tool)
+                                    startLegacyReworkedTerminal(tabName, workingDirectoryString, command, toolName, registration)
                                         ?: run {
                                             notifyLegacyReworkedFallbackIfNeeded(toolName)
-                                            startClassicTerminal(tabName, workingDirectoryString, command, toolName, tool)
+                                            startClassicTerminal(tabName, workingDirectoryString, command, toolName, registration)
                                         }
                                 }
                             if (result is BridgeResult.Error) {
@@ -424,7 +480,7 @@ class AiTerminalBridgeService(
         return toolName == OPEN_CODE_TAB_NAME && ideBaselineVersion() in 251..252
     }
 
-    private fun startFrontendTerminal(tabName: String, workingDirectory: String, command: String, toolName: String, tool: AiTool): BridgeResult? {
+    private fun startFrontendTerminal(tabName: String, workingDirectory: String, command: String, toolName: String, registration: AiTerminalRegistration): BridgeResult? {
         val helper = frontendHelper ?: return null
         return try {
             val tab = helper.createAiTerminal(tabName, workingDirectory)
@@ -434,7 +490,7 @@ class AiTerminalBridgeService(
                 "$toolName terminal started",
                 "Failed to start $toolName"
             ) {
-                registerAiTerminal(TargetTerminal.Frontend(tab), tool)
+                registerAiTerminal(TargetTerminal.Frontend(tab), registration)
             }
         } catch (exception: Throwable) {
             notify(project, "The new terminal is unavailable; falling back to Classic Terminal: ${exception.message}", NotificationType.WARNING)
@@ -442,7 +498,7 @@ class AiTerminalBridgeService(
         }
     }
 
-    private fun startLegacyReworkedTerminal(tabName: String, workingDirectory: String, command: String, toolName: String, tool: AiTool): BridgeResult? {
+    private fun startLegacyReworkedTerminal(tabName: String, workingDirectory: String, command: String, toolName: String, registration: AiTerminalRegistration): BridgeResult? {
         return try {
             val widget = legacyReworkedTerminalHelper.createAiTerminal(tabName, workingDirectory)
                 ?: return null
@@ -452,10 +508,10 @@ class AiTerminalBridgeService(
                 successMessage = "$toolName terminal started",
                 failurePrefix = "Failed to run $command",
                 onCommandSent = {
-                    registerAiTerminal(TargetTerminal.LegacyReworked(widget), tool)
+                    registerAiTerminal(TargetTerminal.LegacyReworked(widget), registration)
                 },
                 onCommandFailed = {
-                    val result = startClassicTerminal(tabName, workingDirectory, command, toolName, tool)
+                    val result = startClassicTerminal(tabName, workingDirectory, command, toolName, registration)
                     if (result is BridgeResult.Error) {
                         notify(project, result.message, NotificationType.WARNING)
                     }
@@ -467,7 +523,7 @@ class AiTerminalBridgeService(
         }
     }
 
-    private fun startClassicTerminal(tabName: String, workingDirectory: String, command: String, toolName: String, tool: AiTool): BridgeResult {
+    private fun startClassicTerminal(tabName: String, workingDirectory: String, command: String, toolName: String, registration: AiTerminalRegistration): BridgeResult {
         val terminalToolWindowManager = TerminalToolWindowManager.getInstance(project)
         val toolWindow = terminalToolWindow(terminalToolWindowManager)
             ?: return BridgeResult.Error("Terminal tool window was not found.")
@@ -487,7 +543,7 @@ class AiTerminalBridgeService(
         toolWindow.activate(Runnable {
             try {
                 ShellTerminalWidget.toShellJediTermWidgetOrThrow(widget).executeCommand(command)
-                registerAiTerminal(TargetTerminal.Classic(widget), tool)
+                registerAiTerminal(TargetTerminal.Classic(widget), registration)
                 notify(project, "$toolName terminal started", NotificationType.INFORMATION)
             } catch (exception: Throwable) {
                 notify(project, "Failed to run $command: ${exception.message}", NotificationType.WARNING)
@@ -573,15 +629,15 @@ class AiTerminalBridgeService(
         }
     }
 
-    private fun registerAiTerminal(terminal: TargetTerminal, tool: AiTool) {
+    private fun registerAiTerminal(terminal: TargetTerminal, registration: AiTerminalRegistration) {
         when (terminal) {
-            is TargetTerminal.Classic -> aiClassicTerminals[terminal.widget] = tool
+            is TargetTerminal.Classic -> aiClassicTerminals[terminal.widget] = registration
             is TargetTerminal.LegacyReworked -> {
-                aiLegacyReworkedTerminals[terminal.widget] = tool
+                aiLegacyReworkedTerminals[terminal.widget] = registration
                 project.service<AiTerminalFileLinkService>().setupWidget(terminal.widget)
             }
             is TargetTerminal.Frontend -> {
-                aiFrontendTerminals[terminal.tab] = tool
+                aiFrontendTerminals[terminal.tab] = registration
                 project.service<AiTerminalFileLinkService>().setupFrontendTab(terminal.tab)
             }
         }
@@ -598,42 +654,59 @@ class AiTerminalBridgeService(
         }
     }
 
+    /** Release per-tab monitoring and generated launcher scripts when its terminal disappears. */
+    private fun unregisterAiTerminal(registration: AiTerminalRegistration) {
+        try {
+            registration.cleanup()
+        } catch (exception: Throwable) {
+            log.warn("Failed to clean up ${registration.tool} launcher for ${registration.tabId}", exception)
+        }
+        try {
+            if (!project.isDisposed) {
+                project.service<AiTurnMonitorService>().unregisterTab(registration.tabId)
+            }
+        } catch (exception: Throwable) {
+            log.warn("Failed to unregister ${registration.tool} terminal tab ${registration.tabId}", exception)
+        }
+    }
+
     private fun pruneInvalidAiTerminalRecords() {
         val helper = frontendHelper
         if (helper == null) {
+            aiFrontendTerminals.values.toList().forEach(::unregisterAiTerminal)
             aiFrontendTerminals.clear()
         } else {
-            aiFrontendTerminals.keys.removeAll { !helper.isTabExists(it) }
+            aiFrontendTerminals.keys.filter { !helper.isTabExists(it) }
+                .forEach { tab -> aiFrontendTerminals.remove(tab)?.let(::unregisterAiTerminal) }
         }
 
-        aiLegacyReworkedTerminals.keys.removeAll { widget ->
-            !legacyReworkedTerminalHelper.isWidgetContentExists(widget)
-        }
+        aiLegacyReworkedTerminals.keys.filter { widget -> !legacyReworkedTerminalHelper.isWidgetContentExists(widget) }
+            .forEach { widget -> aiLegacyReworkedTerminals.remove(widget)?.let(::unregisterAiTerminal) }
 
-        aiClassicTerminals.keys.removeAll { widget ->
+        aiClassicTerminals.keys.filter { widget ->
             try {
                 widget.ttyConnector?.isConnected != true
             } catch (_: Throwable) {
                 true
             }
-        }
+        }.forEach { widget -> aiClassicTerminals.remove(widget)?.let(::unregisterAiTerminal) }
     }
 
     private fun findExistingTerminal(tool: AiTool): TargetTerminal? {
         pruneInvalidAiTerminalRecords()
 
-        for ((tab, tabTool) in aiFrontendTerminals) {
-            if (tabTool == tool && isUsable(TargetTerminal.Frontend(tab))) {
+        for ((tab, registration) in aiFrontendTerminals) {
+            if (registration.tool == tool && isUsable(TargetTerminal.Frontend(tab))) {
                 return TargetTerminal.Frontend(tab)
             }
         }
-        for ((widget, widgetTool) in aiLegacyReworkedTerminals) {
-            if (widgetTool == tool && isUsable(TargetTerminal.LegacyReworked(widget))) {
+        for ((widget, registration) in aiLegacyReworkedTerminals) {
+            if (registration.tool == tool && isUsable(TargetTerminal.LegacyReworked(widget))) {
                 return TargetTerminal.LegacyReworked(widget)
             }
         }
-        for ((widget, widgetTool) in aiClassicTerminals) {
-            if (widgetTool == tool && isUsable(TargetTerminal.Classic(widget))) {
+        for ((widget, registration) in aiClassicTerminals) {
+            if (registration.tool == tool && isUsable(TargetTerminal.Classic(widget))) {
                 return TargetTerminal.Classic(widget)
             }
         }
@@ -774,7 +847,8 @@ class AiTerminalBridgeService(
         private const val OPEN_CODE_TAB_NAME = "OpenCode"
         private const val CLAUDE_CODE_TAB_NAME = "Claude Code"
         private const val PI_TAB_NAME = "Pi"
-        private const val NO_ACTIVE_TERMINAL_MESSAGE = "Start and activate an OpenCode, Claude Code, or Pi terminal first."
+        private const val CODEX_TAB_NAME = "Codex"
+        private const val NO_ACTIVE_TERMINAL_MESSAGE = "Start and activate an OpenCode, Claude Code, Pi, or Codex terminal first."
         private const val LINE_END_SPACE = "\u0005 "
         private const val BRACKETED_PASTE_START = "\u001B[200~"
         private const val BRACKETED_PASTE_END = "\u001B[201~"
@@ -805,4 +879,10 @@ class AiTerminalBridgeService(
         data class LegacyReworked(val widget: TerminalWidget) : TargetTerminal()
         data class Frontend(val tab: Any) : TargetTerminal()
     }
+
+    private data class AiTerminalRegistration(
+        val tool: AiTool,
+        val tabId: String,
+        val cleanup: () -> Unit
+    )
 }

@@ -1,4 +1,4 @@
-# OpenCode / Claude Code / Pi TUI integration — Architecture
+# OpenCode / Claude Code / Pi / Codex TUI integration — Architecture
 
 This document summarizes the source structure, terminal compatibility layers, and AI CLI integration used by the plugin.
 
@@ -16,14 +16,14 @@ src/main/kotlin/io/github/q110/aiterminaltools/
 │   ├── AiTerminalToolsMenuRegistrar.kt    # Registers actions in IDE menus and toolbars
 │   ├── FrontendTerminalHelper.kt          # New frontend terminal API adapter
 │   ├── LegacyReworkedTerminalHelper.kt    # Older/reworked terminal API adapter
-│   ├── AiCliRunner.kt                     # OpenCode, Claude Code and Pi CLI execution
+│   ├── AiCliRunner.kt                     # OpenCode, Claude Code, Pi and Codex CLI execution
 │   ├── GenerateCommitMessageAction.kt     # AI commit message generation
 │   ├── SendSelectionToAiTerminalAction.kt # Send selected code to an AI terminal
 │   ├── SendPathToAiTerminalAction.kt      # Send file/folder paths to an AI terminal
 │   ├── SendDiagnosticToAiTerminalAction.kt# Send an IDE diagnostic to an AI terminal
 │   ├── ExplainSelectionWithAiAction.kt    # Explain selected code
 │   ├── ModifySelectionWithAiAction.kt     # Modify selected code
-│   └── Start*Action.kt                    # Start OpenCode, Claude Code, or Pi
+│   └── Start*Action.kt                    # Start OpenCode, Claude Code, Pi, or Codex
 │
 ├── filter/                                # File-reference matching and path utilities
 │   ├── FilterPatterns.kt                  # Regexes for file references and @paths
@@ -49,6 +49,7 @@ src/main/kotlin/io/github/q110/aiterminaltools/
 │   ├── AiTurnOpenCodeInstaller.kt         # OpenCode plugin and launcher generator
 │   ├── AiTurnHookInstaller.kt             # Claude Code hooks and launcher generator
 │   ├── AiTurnPiInstaller.kt               # Pi extension and launcher generator
+│   ├── AiTurnCodexInstaller.kt            # Codex notify callback and launcher generator
 │   └── ShowLastAiTurnDiffAction.kt        # Reopen the latest AI Turn Diff
 │
 ├── settings/                              # Persistent settings and settings UI
@@ -85,5 +86,10 @@ Pi:
 
 - Generates `.pi/extensions/ai-terminal-tools.ts` and a per-terminal launcher.
 - The extension reports turn and file events to the local event server.
+
+Codex:
+
+- Generates a per-terminal launcher with a Codex `notify` configuration override.
+- Codex notifies only after a turn completes, so the monitor snapshots project files at turn start and compares them at completion.
 
 All launchers inject `AITT_PORT`, `AITT_TOKEN`, and `AITT_TAB_ID`. Diff state is isolated by tab ID and upstream session ID, so multiple AI terminals can run concurrently without mixing state. When a turn completes, the presenter compares snapshots with the current files and opens the native diff UI only when content changed.

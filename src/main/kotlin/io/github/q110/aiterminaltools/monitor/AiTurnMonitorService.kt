@@ -26,6 +26,10 @@ class AiTurnMonitorService(
     /** Register an AI terminal started by the plugin; subsequent HTTP events must match tabId/token */
     fun registerTab(context: AiTerminalTabContext) {
         tabs[context.tabId] = context
+        if (context.tool == AiTool.CODEX) {
+            startTurn(context, AiTurnEvent(context.tool, AiTurnEventType.TURN_START, context.tabId, context.token, null, emptyList(), ""))
+            turns[context.tabId]?.let { project.service<AiTurnSnapshotService>().captureGitTrackedProjectBefore(it, context.workingDirectory) }
+        }
         log.info("Registered AI terminal tab: ${context.tabId} (${context.tool})")
     }
 
@@ -216,13 +220,20 @@ class AiTurnMonitorService(
                 "changed files: ${turn.changedFiles.size}, failed: $failed"
         )
 
-        runOnTurnEndCommand(turn)
-
-        if (turn.changedFiles.isEmpty()) {
-            return
+        if (tab.tool == AiTool.CODEX) {
+            turn.changedFiles.addAll(project.service<AiTurnSnapshotService>().changedGitTrackedProjectFiles(turn, turn.cwd))
         }
 
-        refreshAndShowDiff(turn)
+        runOnTurnEndCommand(turn)
+
+        if (turn.changedFiles.isNotEmpty()) {
+            refreshAndShowDiff(turn)
+        }
+
+        if (tab.tool == AiTool.CODEX && !project.isDisposed) {
+            startTurn(tab, event)
+            turns[tab.tabId]?.let { project.service<AiTurnSnapshotService>().captureGitTrackedProjectBefore(it, tab.workingDirectory) }
+        }
     }
 
     private fun canFinishOpenCodeTurn(turn: AiTurnState, event: AiTurnEvent): Boolean {

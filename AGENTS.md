@@ -4,7 +4,7 @@
 
 This plugin provides five main capabilities:
 
-1. Opens and manages AI terminal tabs for OpenCode, Claude Code, and Pi.
+1. Opens and manages AI terminal tabs for OpenCode, Claude Code, Pi, and Codex.
 2. Sends selected text, diagnostics, console errors, and `@path` references from the IDE into an active AI terminal.
 3. Adds orange overlay-diamond file links to frontend/reworked terminal editors.
 4. Monitors AI turns, captures file snapshots, and shows diffs after a turn finishes.
@@ -19,9 +19,9 @@ This plugin provides five main capabilities:
 
 ### `bridge/`
 
-- `AiTerminalBridgeService.kt` is the central project service. It creates OpenCode, Claude Code, and Pi terminal tabs, detects active terminals, injects input, and coordinates monitoring.
+- `AiTerminalBridgeService.kt` is the central project service. It creates OpenCode, Claude Code, Pi, and Codex terminal tabs, detects active terminals, injects input, and coordinates monitoring.
 - `AbstractStartAiTerminalAction.kt` and the `Start*Action.kt` classes implement the three terminal start actions.
-- `AiCliRunner.kt` runs OpenCode, Claude Code, and Pi for query and commit-message workflows.
+- `AiCliRunner.kt` runs OpenCode, Claude Code, Pi, and Codex for query and commit-message workflows.
 - `AbstractSelectionAiAction.kt` is the base for AI selection actions.
 - `ExplainSelectionWithAiAction.kt` explains selected code.
 - `ModifySelectionWithAiAction.kt` replaces selected code with an AI-generated modification.
@@ -52,7 +52,7 @@ This plugin provides five main capabilities:
 ### `monitor/`
 
 - `AiTurnModels.kt` contains shared models for tools, events, turns, snapshots, and terminal contexts.
-- `AiTurnEventServer.kt` runs a local HTTP server on `127.0.0.1` for Claude hooks, the OpenCode plugin, and the Pi extension.
+- `AiTurnEventServer.kt` runs a local HTTP server on `127.0.0.1` for Claude hooks, the OpenCode plugin, the Pi extension, and Codex notifications.
 - `AiTurnMonitorService.kt` registers AI tabs, processes events, captures snapshots, and decides when to show diffs.
 - `AiTurnSnapshotService.kt` captures text/binary file snapshots before AI edits, with size limits.
 - `AiTurnDiffPresenter.kt` builds IntelliJ diff requests, remembers the latest completed turn, and supports reverting changes.
@@ -61,15 +61,17 @@ This plugin provides five main capabilities:
 - `AiTurnHookInstaller.kt` generates Claude Code hooks and launchers.
 - `AiTurnOpenCodeInstaller.kt` generates the project-level OpenCode JavaScript plugin and launchers.
 - `AiTurnPiInstaller.kt` generates the project-level Pi TypeScript extension and launchers.
+- `AiTurnCodexInstaller.kt` generates Codex notification callbacks and launchers.
 - `ShowLastAiTurnDiffAction.kt` reopens the most recent completed AI turn diff.
 
 ## End-to-End Flow
 
-1. The user starts OpenCode, Claude Code, or Pi through the plugin.
+1. The user starts OpenCode, Claude Code, Pi, or Codex through the plugin.
 2. The plugin creates a launcher and installs the tool-specific integration when needed:
    - OpenCode: `.opencode/plugins/ai-terminal-tools.js`
    - Claude Code: `.claude/settings.local.json` hooks
    - Pi: `.pi/extensions/ai-terminal-tools.ts`
+   - Codex: a per-terminal launcher with a `notify` configuration override
 3. The launcher injects `AITT_*` environment variables so callbacks are associated with the correct project and terminal tab.
 4. When an AI turn begins, the monitor captures before-snapshots for files reported by the tool.
 5. When the turn ends, current files are compared with snapshots and a diff is shown if content changed.

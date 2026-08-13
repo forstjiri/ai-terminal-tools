@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.github.forstjiri"
-version = "0.5.6"
+version = "0.5.8"
 
 kotlin {
     jvmToolchain(25)
@@ -66,13 +66,13 @@ intellijPlatform {
 
     pluginConfiguration {
         id = "io.github.forstjiri.aiterminaltool"
-        name = "OpenCode / Claude Code / Pi TUI integration"
+        name = "OpenCode / Claude Code / Pi / Codex TUI integration"
         version = project.version.toString()
         description = """
             Use your favorite TUI AI coding agent inside IntelliJ with superpowers!
 
             <p>
-              🛠️ There are many tools that integrate OpenCode, Claude Code, or Pi, but complex GUIs never perfectly mirror TUI functionality. On the flip side, pure TUI tools often lack seamless interaction between the IDE and the terminal.
+              🛠️ There are many tools that integrate OpenCode, Claude Code, Pi, or Codex, but complex GUIs never perfectly mirror TUI functionality. On the flip side, pure TUI tools often lack seamless interaction between the IDE and the terminal.
               <br><br>
               💡 To bridge this gap, I forked <a href="https://github.com/Q-110/ai-terminal-tools">🍴 this</a> Chinese plugin, translated it, and modified it for a comfortable, seamless workflow. Feedback is highly welcome!
             </p>
@@ -80,8 +80,8 @@ intellijPlatform {
             <h4>✨ Features</h4>
             <ul>
               <li>🎯 <strong>Jump to code:</strong> Instantly jump from terminal or console file references to exact editor locations, including line numbers and ranges.</li>
-              <li>📤 <strong>Send context:</strong> Easily send editor selections, file paths, dragged files, and console error blocks directly to your active OpenCode, Claude Code, or Pi terminal.</li>
-              <li>🔍 <strong>Diff review:</strong> Review file changes from each OpenCode, Claude Code, or Pi turn side-by-side using the native IntelliJ diff window.</li>
+              <li>📤 <strong>Send context:</strong> Easily send editor selections, file paths, dragged files, and console error blocks directly to your active OpenCode, Claude Code, Pi, or Codex terminal.</li>
+              <li>🔍 <strong>Diff review:</strong> Review file changes from each OpenCode, Claude Code, Pi, or Codex turn side-by-side using the native IntelliJ diff window.</li>
               <li>↩️ <strong>One-click revert:</strong> Instantly revert AI changes and append the context to your next message.</li>
               <li>📝 <strong>Generate commit messages:</strong> Generate concise commit messages from selected files in the Commit panel, with a configurable AI tool, model, and custom prompt.</li>
               <li>🔔 <strong>Post-turn actions:</strong> Run custom commands automatically after a turn ends (e.g., play sounds using <code>pw-play</code>).</li>              

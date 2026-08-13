@@ -25,6 +25,7 @@ class AiTerminalToolsConfigurable : Configurable {
     private var openCodeTerminalCommandField: JBTextField? = null
     private var claudeCodeTerminalCommandField: JBTextField? = null
     private var piTerminalCommandField: JBTextField? = null
+    private var codexTerminalCommandField: JBTextField? = null
     private var onTurnEndCommandField: JBTextField? = null
     private var appendChangesToNextMessageCheckBox: JBCheckBox? = null
     private var panel: JPanel? = null
@@ -32,22 +33,24 @@ class AiTerminalToolsConfigurable : Configurable {
     private var openCodeCommitMessageModel: String = ""
     private var claudeCommitMessageModel: String = ""
     private var piCommitMessageModel: String = ""
+    private var codexCommitMessageModel: String = ""
     private var updatingCommitMessageUi: Boolean = false
 
     override fun getDisplayName(): String {
-        return "OpenCode / Claude Code / Pi TUI integration"
+        return "OpenCode / Claude Code / Pi / Codex TUI integration"
     }
 
     override fun createComponent(): JComponent {
         val fileLinksCheckBox = JBCheckBox("Enable file navigation links")
         val errorToAiTerminalIconsCheckBox = JBCheckBox("Enable console error send icons")
         val dragToAiTerminalCheckBox = JBCheckBox("Enable dragging files/folders to AI terminals")
-        val commitMessageAiToolCombo = javax.swing.JComboBox(arrayOf(COMMIT_MESSAGE_AI_TOOL_OPENCODE_LABEL, COMMIT_MESSAGE_AI_TOOL_CLAUDE_LABEL, COMMIT_MESSAGE_AI_TOOL_PI_LABEL))
+        val commitMessageAiToolCombo = javax.swing.JComboBox(arrayOf(COMMIT_MESSAGE_AI_TOOL_OPENCODE_LABEL, COMMIT_MESSAGE_AI_TOOL_CLAUDE_LABEL, COMMIT_MESSAGE_AI_TOOL_PI_LABEL, COMMIT_MESSAGE_AI_TOOL_CODEX_LABEL))
         val commitMessageModelField = JBTextField()
         val commitMessageAdditionalPromptArea = JBTextArea(4, 48)
         val openCodeTerminalCommandField = JBTextField()
         val claudeCodeTerminalCommandField = JBTextField()
         val piTerminalCommandField = JBTextField()
+        val codexTerminalCommandField = JBTextField()
         val onTurnEndCommandField = JBTextField()
         val appendChangesToNextMessageCheckBox = JBCheckBox("Append changes made in diff window to next agent message")
         val panel = JPanel(GridBagLayout())
@@ -135,17 +138,25 @@ class AiTerminalToolsConfigurable : Configurable {
 
         constraints.gridy = 17
         constraints.insets = JBUI.insetsTop(16)
-        panel.add(JLabel("On turn end command:"), constraints)
+        panel.add(JLabel("Codex startup command:"), constraints)
 
         constraints.gridy = 18
         constraints.insets = JBUI.insetsTop(4)
-        panel.add(onTurnEndCommandField, constraints)
+        panel.add(codexTerminalCommandField, constraints)
 
         constraints.gridy = 19
         constraints.insets = JBUI.insetsTop(16)
-        panel.add(appendChangesToNextMessageCheckBox, constraints)
+        panel.add(JLabel("On turn end command:"), constraints)
 
         constraints.gridy = 20
+        constraints.insets = JBUI.insetsTop(4)
+        panel.add(onTurnEndCommandField, constraints)
+
+        constraints.gridy = 21
+        constraints.insets = JBUI.insetsTop(16)
+        panel.add(appendChangesToNextMessageCheckBox, constraints)
+
+        constraints.gridy = 22
         constraints.weighty = 1.0
         constraints.fill = GridBagConstraints.BOTH
         panel.add(JPanel(), constraints)
@@ -166,6 +177,7 @@ class AiTerminalToolsConfigurable : Configurable {
         this.openCodeTerminalCommandField = openCodeTerminalCommandField
         this.claudeCodeTerminalCommandField = claudeCodeTerminalCommandField
         this.piTerminalCommandField = piTerminalCommandField
+        this.codexTerminalCommandField = codexTerminalCommandField
         this.onTurnEndCommandField = onTurnEndCommandField
         this.appendChangesToNextMessageCheckBox = appendChangesToNextMessageCheckBox
         this.panel = panel
@@ -179,11 +191,13 @@ class AiTerminalToolsConfigurable : Configurable {
         val currentModel = when (currentAiTool) {
             COMMIT_MESSAGE_AI_TOOL_OPENCODE -> commitMessageModelField?.text?.trim().orEmpty()
             COMMIT_MESSAGE_AI_TOOL_PI -> piCommitMessageModel
+            COMMIT_MESSAGE_AI_TOOL_CODEX -> codexCommitMessageModel
             else -> claudeCommitMessageModel
         }
         val settingsModel = when (settingsAiTool) {
             COMMIT_MESSAGE_AI_TOOL_CLAUDE -> settings.claudeCommitMessageModel
             COMMIT_MESSAGE_AI_TOOL_PI -> settings.piCommitMessageModel
+            COMMIT_MESSAGE_AI_TOOL_CODEX -> settings.codexCommitMessageModel
             else -> settings.commitMessageModel
         }
         return fileLinksCheckBox?.isSelected != settings.fileLinksEnabled ||
@@ -195,6 +209,7 @@ class AiTerminalToolsConfigurable : Configurable {
             openCodeTerminalCommandField?.text?.trim() != settings.openCodeTerminalCommand ||
             claudeCodeTerminalCommandField?.text?.trim() != settings.claudeCodeTerminalCommand ||
             piTerminalCommandField?.text?.trim() != settings.piTerminalCommand ||
+            codexTerminalCommandField?.text?.trim() != settings.codexTerminalCommand ||
             onTurnEndCommandField?.text?.trim() != settings.onTurnEndCommand ||
             appendChangesToNextMessageCheckBox?.isSelected != settings.appendChangesToNextMessage
     }
@@ -209,10 +224,12 @@ class AiTerminalToolsConfigurable : Configurable {
         settings.commitMessageModel = openCodeCommitMessageModel
         settings.claudeCommitMessageModel = claudeCommitMessageModel
         settings.piCommitMessageModel = piCommitMessageModel
+        settings.codexCommitMessageModel = codexCommitMessageModel
         settings.commitMessageAdditionalPrompt = commitMessageAdditionalPromptArea?.text?.trim().orEmpty()
         settings.openCodeTerminalCommand = openCodeTerminalCommandField?.text?.trim().orEmpty()
         settings.claudeCodeTerminalCommand = claudeCodeTerminalCommandField?.text?.trim().orEmpty()
         settings.piTerminalCommand = piTerminalCommandField?.text?.trim().orEmpty()
+        settings.codexTerminalCommand = codexTerminalCommandField?.text?.trim().orEmpty()
         settings.onTurnEndCommand = onTurnEndCommandField?.text?.trim().orEmpty()
         settings.appendChangesToNextMessage = appendChangesToNextMessageCheckBox?.isSelected == true
     }
@@ -226,10 +243,12 @@ class AiTerminalToolsConfigurable : Configurable {
         openCodeCommitMessageModel = settings.commitMessageModel
         claudeCommitMessageModel = settings.claudeCommitMessageModel
         piCommitMessageModel = settings.piCommitMessageModel
+        codexCommitMessageModel = settings.codexCommitMessageModel
         commitMessageAdditionalPromptArea?.text = settings.commitMessageAdditionalPrompt
         openCodeTerminalCommandField?.text = settings.openCodeTerminalCommand
         claudeCodeTerminalCommandField?.text = settings.claudeCodeTerminalCommand
         piTerminalCommandField?.text = settings.piTerminalCommand
+        codexTerminalCommandField?.text = settings.codexTerminalCommand
         onTurnEndCommandField?.text = settings.onTurnEndCommand
         appendChangesToNextMessageCheckBox?.isSelected = settings.appendChangesToNextMessage
         updatingCommitMessageUi = true
@@ -248,6 +267,7 @@ class AiTerminalToolsConfigurable : Configurable {
         openCodeTerminalCommandField = null
         claudeCodeTerminalCommandField = null
         piTerminalCommandField = null
+        codexTerminalCommandField = null
         onTurnEndCommandField = null
         appendChangesToNextMessageCheckBox = null
         panel = null
@@ -258,6 +278,7 @@ class AiTerminalToolsConfigurable : Configurable {
         when (selectedCommitMessageAiTool) {
             COMMIT_MESSAGE_AI_TOOL_CLAUDE -> claudeCommitMessageModel = model
             COMMIT_MESSAGE_AI_TOOL_PI -> piCommitMessageModel = model
+            COMMIT_MESSAGE_AI_TOOL_CODEX -> codexCommitMessageModel = model
             else -> openCodeCommitMessageModel = model
         }
     }
@@ -266,6 +287,7 @@ class AiTerminalToolsConfigurable : Configurable {
         val model = when (selectedCommitMessageAiTool) {
             COMMIT_MESSAGE_AI_TOOL_CLAUDE -> claudeCommitMessageModel
             COMMIT_MESSAGE_AI_TOOL_PI -> piCommitMessageModel
+            COMMIT_MESSAGE_AI_TOOL_CODEX -> codexCommitMessageModel
             else -> openCodeCommitMessageModel
         }
         commitMessageModelField?.text = model
@@ -275,6 +297,7 @@ class AiTerminalToolsConfigurable : Configurable {
         return when (label) {
             COMMIT_MESSAGE_AI_TOOL_CLAUDE_LABEL -> COMMIT_MESSAGE_AI_TOOL_CLAUDE
             COMMIT_MESSAGE_AI_TOOL_PI_LABEL -> COMMIT_MESSAGE_AI_TOOL_PI
+            COMMIT_MESSAGE_AI_TOOL_CODEX_LABEL -> COMMIT_MESSAGE_AI_TOOL_CODEX
             else -> COMMIT_MESSAGE_AI_TOOL_OPENCODE
         }
     }
@@ -283,6 +306,7 @@ class AiTerminalToolsConfigurable : Configurable {
         return when (aiTool) {
             COMMIT_MESSAGE_AI_TOOL_CLAUDE -> COMMIT_MESSAGE_AI_TOOL_CLAUDE_LABEL
             COMMIT_MESSAGE_AI_TOOL_PI -> COMMIT_MESSAGE_AI_TOOL_PI_LABEL
+            COMMIT_MESSAGE_AI_TOOL_CODEX -> COMMIT_MESSAGE_AI_TOOL_CODEX_LABEL
             else -> COMMIT_MESSAGE_AI_TOOL_OPENCODE_LABEL
         }
     }
@@ -291,6 +315,7 @@ class AiTerminalToolsConfigurable : Configurable {
         return when (aiTool) {
             COMMIT_MESSAGE_AI_TOOL_CLAUDE -> COMMIT_MESSAGE_AI_TOOL_CLAUDE
             COMMIT_MESSAGE_AI_TOOL_PI -> COMMIT_MESSAGE_AI_TOOL_PI
+            COMMIT_MESSAGE_AI_TOOL_CODEX -> COMMIT_MESSAGE_AI_TOOL_CODEX
             else -> COMMIT_MESSAGE_AI_TOOL_OPENCODE
         }
     }
@@ -299,8 +324,10 @@ class AiTerminalToolsConfigurable : Configurable {
         private const val COMMIT_MESSAGE_AI_TOOL_OPENCODE = "opencode"
         private const val COMMIT_MESSAGE_AI_TOOL_CLAUDE = "claude"
         private const val COMMIT_MESSAGE_AI_TOOL_PI = "pi"
+        private const val COMMIT_MESSAGE_AI_TOOL_CODEX = "codex"
         private const val COMMIT_MESSAGE_AI_TOOL_OPENCODE_LABEL = "OpenCode"
         private const val COMMIT_MESSAGE_AI_TOOL_CLAUDE_LABEL = "Claude Code"
         private const val COMMIT_MESSAGE_AI_TOOL_PI_LABEL = "Pi"
+        private const val COMMIT_MESSAGE_AI_TOOL_CODEX_LABEL = "Codex"
     }
 }
