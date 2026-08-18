@@ -56,6 +56,12 @@
             text="Start OpenCode"
             description="Open a new terminal and run opencode"/>
         <action
+            id="AiTerminalTools.StartOpenCode2"
+            class="io.github.q110.aiterminaltools.bridge.StartOpenCode2Action"
+            icon="/icons/opencode-official-action.svg"
+            text="Start OpenCode 2"
+            description="Open a new terminal and run OpenCode 2"/>
+        <action
             id="AiTerminalTools.StartClaudeCode"
             class="io.github.q110.aiterminaltools.bridge.StartClaudeCodeAction"
             icon="/icons/claude-code-official-action.svg"

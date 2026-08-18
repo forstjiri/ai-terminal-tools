@@ -28,6 +28,7 @@ internal object AiCliRunner {
 
     fun normalizedCommitMessageAiTool(aiTool: String): String {
         return when (aiTool) {
+            "opencode2" -> "opencode2"
             "claude" -> "claude"
             "pi" -> "pi"
             "codex" -> "codex"
@@ -37,6 +38,7 @@ internal object AiCliRunner {
 
     fun toolDisplayName(aiTool: String): String {
         return when (aiTool) {
+            "opencode2" -> "OpenCode 2"
             "claude" -> "Claude Code"
             "pi" -> "Pi"
             "codex" -> "Codex"
@@ -148,6 +150,10 @@ internal object AiCliRunner {
 
     fun opencodeCommand(): String {
         return if (SystemInfo.isWindows) "opencode.cmd" else "opencode"
+    }
+
+    fun opencode2Command(): String {
+        return if (SystemInfo.isWindows) "opencode2.cmd" else "opencode2"
     }
 
     fun piCommand(): String {
@@ -284,18 +290,21 @@ internal object AiCliRunner {
         basePath: Path,
         project: Project,
         indicator: ProgressIndicator,
-        showTerminal: Boolean = true
+        showTerminal: Boolean = true,
+        commandName: String = opencodeCommand(),
+        configuredModel: String? = null,
+        toolLabel: String = "OpenCode"
     ): String {
         val settings = AiTerminalToolsSettings.getInstance().getState()
-        val model = settings.commitMessageModel.trim()
-        val command = mutableListOf(opencodeCommand(), "run", "--pure")
+        val model = (configuredModel ?: settings.commitMessageModel).trim()
+        val command = mutableListOf(commandName, "run", "--pure")
         if (model.isNotEmpty()) command += listOf("-m", model)
         command += listOf("--agent", "build", prompt)
 
         if (!showTerminal) {
             val result = runProcess(command, basePath, OPENCODE_TIMEOUT_SECONDS)
             if (result.exitCode != 0) {
-                throw AiCliException(extractErrorMessage("OpenCode", result.output))
+                throw AiCliException(extractErrorMessage(toolLabel, result.output))
             }
             return result.output
         }
@@ -314,7 +323,7 @@ internal object AiCliRunner {
             process = try {
                 ProcessBuilder(command).directory(basePath.toFile()).redirectErrorStream(true).start()
             } catch (exception: Throwable) {
-                throw AiCliException("Could not start opencode: ${exception.message}")
+                throw AiCliException("Could not start $commandName: ${exception.message}")
             }
             try { process!!.outputStream.close() } catch (_: Throwable) {}
 
@@ -344,7 +353,7 @@ internal object AiCliRunner {
             }
             readerThread!!.join()
             if (process!!.exitValue() != 0) {
-                throw AiCliException(extractErrorMessage("OpenCode", output.toString()))
+                throw AiCliException(extractErrorMessage(toolLabel, output.toString()))
             }
             return output.toString()
         } finally {
@@ -353,6 +362,25 @@ internal object AiCliRunner {
             try { Files.deleteIfExists(outputFile) } catch (_: Throwable) {}
             try { Runtime.getRuntime().removeShutdownHook(shutdownHook) } catch (_: IllegalStateException) {}
         }
+    }
+
+    fun runOpencode2Query(
+        prompt: String,
+        basePath: Path,
+        project: Project,
+        indicator: ProgressIndicator,
+        showTerminal: Boolean = true
+    ): String {
+        return runOpencodeQuery(
+            prompt = prompt,
+            basePath = basePath,
+            project = project,
+            indicator = indicator,
+            showTerminal = showTerminal,
+            commandName = opencode2Command(),
+            configuredModel = AiTerminalToolsSettings.getInstance().getState().openCode2CommitMessageModel,
+            toolLabel = "OpenCode 2"
+        )
     }
 
     fun runQuery(
@@ -364,6 +392,7 @@ internal object AiCliRunner {
         showTerminal: Boolean = true
     ): String {
         return when (aiTool) {
+            "opencode2" -> runOpencode2Query(prompt, basePath, project, indicator, showTerminal)
             "claude" -> runClaudeQuery(prompt, basePath)
             "pi" -> runPiQuery(prompt, basePath)
             "codex" -> runCodexQuery(prompt, basePath)

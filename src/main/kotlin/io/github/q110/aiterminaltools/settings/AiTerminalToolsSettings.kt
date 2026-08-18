@@ -30,10 +30,12 @@ class AiTerminalToolsSettings : PersistentStateComponent<AiTerminalToolsSettings
         var dragToAiTerminalEnabled: Boolean? = null
         var commitMessageAiTool: String = "opencode"
         var commitMessageModel: String = ""
+        var openCode2CommitMessageModel: String = ""
         var claudeCommitMessageModel: String = ""
         var piCommitMessageModel: String = ""
         var codexCommitMessageModel: String = ""
         var openCodeTerminalCommand: String = ""
+        var openCode2TerminalCommand: String = ""
         var claudeCodeTerminalCommand: String = ""
         var piTerminalCommand: String = ""
         var codexTerminalCommand: String = ""

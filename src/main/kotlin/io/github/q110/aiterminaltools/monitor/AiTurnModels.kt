@@ -7,6 +7,7 @@ import java.nio.file.Path
 /** AI terminal tool type */
 enum class AiTool {
     OPENCODE,
+    OPENCODE_V2,
     CLAUDE_CODE,
     PI,
     CODEX,

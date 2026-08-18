@@ -106,6 +106,7 @@ class AiTurnEventServer(
         val aiTool = when (source.lowercase()) {
             "claude" -> AiTool.CLAUDE_CODE
             "opencode" -> AiTool.OPENCODE
+            "opencode2" -> AiTool.OPENCODE_V2
             "pi" -> AiTool.PI
             "codex" -> AiTool.CODEX
             else -> return null

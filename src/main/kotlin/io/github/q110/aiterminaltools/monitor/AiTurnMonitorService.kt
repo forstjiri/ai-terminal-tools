@@ -26,6 +26,7 @@ class AiTurnMonitorService(
     /** Register an AI terminal started by the plugin; subsequent HTTP events must match tabId/token */
     fun registerTab(context: AiTerminalTabContext) {
         tabs[context.tabId] = context
+        if (context.tool == AiTool.OPENCODE_V2) rewriteOpenCodeV2Bridge()
         if (context.tool == AiTool.CODEX) {
             startTurn(context, AiTurnEvent(context.tool, AiTurnEventType.TURN_START, context.tabId, context.token, null, emptyList(), ""))
             turns[context.tabId]?.let { project.service<AiTurnSnapshotService>().captureGitTrackedProjectBefore(it, context.workingDirectory) }
@@ -34,11 +35,32 @@ class AiTurnMonitorService(
     }
 
     fun unregisterTab(tabId: String) {
-        tabs.remove(tabId)
+        val removed = tabs.remove(tabId)
+        if (removed?.tool == AiTool.OPENCODE_V2) rewriteOpenCodeV2Bridge()
         val turn = turns.remove(tabId)
         if (turn != null && turn.changedFiles.isNotEmpty()) {
             log.info("Tab $tabId unregistered with ${turn.changedFiles.size} uncommitted changes, finishing turn")
             refreshAndShowDiff(turn)
+        }
+    }
+
+    /**
+     * Rewrite the OpenCode V2 bridge file for every working directory that still has
+     * OpenCode 2 tabs. The generated JS plugin runs inside the shared background
+     * server and reads its event-server target from this file (see AiTurnOpenCodeV2Bridge).
+     */
+    private fun rewriteOpenCodeV2Bridge() {
+        try {
+            val port = project.service<AiTurnEventServer>().ensureStarted()
+            val byDirectory = tabs.values
+                .filter { it.tool == AiTool.OPENCODE_V2 }
+                .groupBy { it.workingDirectory }
+            for ((directory, contexts) in byDirectory) {
+                val ordered = contexts.sortedBy { it.createdAtMillis }.map { it.tabId to it.token }
+                AiTurnOpenCodeV2Bridge.write(directory, port, ordered)
+            }
+        } catch (throwable: Throwable) {
+            log.warn("Failed to rewrite OpenCode V2 bridge file: ${throwable.message}")
         }
     }
 
@@ -72,7 +94,7 @@ class AiTurnMonitorService(
     private fun startTurn(tab: AiTerminalTabContext, event: AiTurnEvent) {
         val existing = turns[tab.tabId]
         if (existing != null) {
-            if (tab.tool == AiTool.OPENCODE && attachOpenCodeSessionIfMissing(tab, existing, event)) {
+            if (isOpenCodeTool(tab.tool) && attachOpenCodeSessionIfMissing(tab, existing, event)) {
                 return
             }
 
@@ -85,6 +107,14 @@ class AiTurnMonitorService(
             // Claude normally ends with Stop; finish the previous turn if a new one starts first.
             log.info("Previous turn ${existing.turnId} for tab ${tab.tabId} not finished, auto-finishing")
             turns.remove(tab.tabId, existing)
+            if (tab.tool == AiTool.OPENCODE_V2) {
+                // Prefer precise write-tool events; fall back to a full project diff only
+                // when no write event arrived during the turn.
+                if (existing.beforeSnapshots.isEmpty()) {
+                    existing.changedFiles.addAll(project.service<AiTurnSnapshotService>().changedProjectFiles(existing, existing.cwd))
+                }
+                runOnTurnEndCommand(existing)
+            }
             if (existing.changedFiles.isNotEmpty()) {
                 refreshAndShowDiff(existing)
             }
@@ -99,6 +129,9 @@ class AiTurnMonitorService(
             cwd = tab.workingDirectory,
             upstreamSessionId = event.sessionId
         )
+        if (tab.tool == AiTool.OPENCODE_V2) {
+            turns[tab.tabId]?.let { project.service<AiTurnSnapshotService>().captureProjectBefore(it, tab.workingDirectory) }
+        }
         log.info("Started turn $turnId for tab ${tab.tabId}, session=${event.sessionId}")
     }
 
@@ -129,7 +162,7 @@ class AiTurnMonitorService(
             return null
         }
 
-        if (tab.tool == AiTool.OPENCODE && attachOpenCodeSessionIfMissing(tab, existing, event)) {
+        if (isOpenCodeTool(tab.tool) && attachOpenCodeSessionIfMissing(tab, existing, event)) {
             return turns[tab.tabId]
         }
 
@@ -141,7 +174,7 @@ class AiTurnMonitorService(
         turn: AiTurnState,
         event: AiTurnEvent
     ): Boolean {
-        if (tab.tool != AiTool.OPENCODE) return false
+        if (!isOpenCodeTool(tab.tool)) return false
         val eventSessionId = event.sessionId
         if (turn.upstreamSessionId.isNullOrBlank() && !eventSessionId.isNullOrBlank()) {
             // file_changed/before_write may arrive before busy; use the write event to fill in sessionID.
@@ -157,7 +190,7 @@ class AiTurnMonitorService(
         turn: AiTurnState,
         event: AiTurnEvent
     ): Boolean {
-        return tab.tool == AiTool.OPENCODE &&
+        return isOpenCodeTool(tab.tool) &&
             !turn.upstreamSessionId.isNullOrBlank() &&
             turn.upstreamSessionId == event.sessionId
     }
@@ -167,7 +200,7 @@ class AiTurnMonitorService(
         turn: AiTurnState,
         event: AiTurnEvent
     ): Boolean {
-        return tab.tool == AiTool.OPENCODE &&
+        return isOpenCodeTool(tab.tool) &&
             !turn.upstreamSessionId.isNullOrBlank() &&
             !event.sessionId.isNullOrBlank() &&
             turn.upstreamSessionId != event.sessionId
@@ -201,7 +234,7 @@ class AiTurnMonitorService(
             return
         }
 
-        if (tab.tool == AiTool.OPENCODE && !canFinishOpenCodeTurn(turn, event)) {
+        if (isOpenCodeTool(tab.tool) && !canFinishOpenCodeTurn(turn, event)) {
             // A late session.idle must not end an active turn from a later session.
             log.debug(
                 "Ignoring turn_end for OpenCode session ${event.sessionId}; " +
@@ -222,6 +255,10 @@ class AiTurnMonitorService(
 
         if (tab.tool == AiTool.CODEX) {
             turn.changedFiles.addAll(project.service<AiTurnSnapshotService>().changedGitTrackedProjectFiles(turn, turn.cwd))
+        } else if (tab.tool == AiTool.OPENCODE_V2 && turn.beforeSnapshots.isEmpty()) {
+            // Prefer precise write-tool events; fall back to a full project diff only
+            // when no write event arrived during the turn.
+            turn.changedFiles.addAll(project.service<AiTurnSnapshotService>().changedProjectFiles(turn, turn.cwd))
         }
 
         runOnTurnEndCommand(turn)
@@ -245,6 +282,10 @@ class AiTurnMonitorService(
 
         val turnSessionId = turn.upstreamSessionId
         return turnSessionId.isNullOrBlank() || turnSessionId == eventSessionId
+    }
+
+    private fun isOpenCodeTool(tool: AiTool): Boolean {
+        return tool == AiTool.OPENCODE || tool == AiTool.OPENCODE_V2
     }
 
     private fun captureSnapshots(turn: AiTurnState, rawPaths: List<String>) {

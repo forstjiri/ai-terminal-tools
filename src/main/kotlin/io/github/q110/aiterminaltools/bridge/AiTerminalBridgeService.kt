@@ -24,6 +24,8 @@ import io.github.q110.aiterminaltools.monitor.AiTool
 import io.github.q110.aiterminaltools.monitor.AiTurnEventServer
 import io.github.q110.aiterminaltools.monitor.AiTurnHookInstaller
 import io.github.q110.aiterminaltools.monitor.AiTurnOpenCodeInstaller
+import io.github.q110.aiterminaltools.monitor.AiTurnOpenCodeV2Bridge
+import io.github.q110.aiterminaltools.monitor.AiTurnOpenCodeV2Installer
 import io.github.q110.aiterminaltools.monitor.AiTurnPiInstaller
 import io.github.q110.aiterminaltools.monitor.AiTurnCodexInstaller
 import io.github.q110.aiterminaltools.monitor.AiTurnMonitorService
@@ -54,6 +56,7 @@ class AiTerminalBridgeService(
     private val legacyReworkedTerminalHelper = LegacyReworkedTerminalHelper(project)
     private val log = Logger.getInstance(AiTerminalBridgeService::class.java)
     private val openCodeTerminalStartInProgress = AtomicBoolean(false)
+    private val openCode2TerminalStartInProgress = AtomicBoolean(false)
     private val claudeCodeTerminalStartInProgress = AtomicBoolean(false)
     private val piTerminalStartInProgress = AtomicBoolean(false)
     private val codexTerminalStartInProgress = AtomicBoolean(false)
@@ -141,6 +144,21 @@ class AiTerminalBridgeService(
             return BridgeResult.Success
         }
         scheduleOpenCodeTerminalStart(virtualFileHint)
+        return BridgeResult.Scheduled
+    }
+
+    /** Creates a new OpenCode 2 terminal and starts opencode2. */
+    fun startOpenCode2Terminal(virtualFileHint: VirtualFile? = null): BridgeResult {
+        if (!openCode2TerminalStartInProgress.compareAndSet(false, true)) {
+            return BridgeResult.Scheduled
+        }
+        val existing = findExistingTerminal(AiTool.OPENCODE_V2)
+        if (existing != null) {
+            activateTerminal(existing)
+            openCode2TerminalStartInProgress.set(false)
+            return BridgeResult.Success
+        }
+        scheduleOpenCode2TerminalStart(virtualFileHint)
         return BridgeResult.Scheduled
     }
 
@@ -241,6 +259,61 @@ class AiTerminalBridgeService(
             projectPath = workingDirectory,
             tabId = tabId,
             cleanup = { AiTurnOpenCodeInstaller(project).cleanupLauncherScripts(workingDirectory, tabId) }
+        )
+    }
+
+    private fun scheduleOpenCode2TerminalStart(virtualFileHint: VirtualFile?) {
+        val workingDirectory = try {
+            ProjectBasePath.resolveTerminalExecutionRoot(project, virtualFileHint)
+        } catch (exception: Throwable) {
+            openCode2TerminalStartInProgress.set(false)
+            notify(project, exception.message.orEmpty(), NotificationType.WARNING)
+            return
+        }
+        val tabId = UUID.randomUUID().toString()
+        val token = generateSecureToken()
+
+        val port = try {
+            project.service<AiTurnEventServer>().ensureStarted()
+        } catch (exception: Throwable) {
+            log.error("Failed to start AiTurnEventServer", exception)
+            openCode2TerminalStartInProgress.set(false)
+            notify(project, "Failed to start the AI Turn Event Server: ${exception.message}", NotificationType.WARNING)
+            return
+        }
+
+        val launcherCommand = try {
+            val installer = AiTurnOpenCodeV2Installer(project)
+            val launcherPaths = installer.installOpenCodeV2Plugin(workingDirectory, tabId, token, port)
+            if (isWindows()) launcherPaths.cmdPath.toString() else launcherPaths.shPath.toString()
+        } catch (exception: Throwable) {
+            log.error("Failed to install OpenCode 2 plugin", exception)
+            openCode2TerminalStartInProgress.set(false)
+            notify(project, "Failed to install the OpenCode 2 plugin: ${exception.message}", NotificationType.WARNING)
+            return
+        }
+
+        val tabContext = AiTerminalTabContext(
+            tabId = tabId,
+            token = token,
+            tool = AiTool.OPENCODE_V2,
+            workingDirectory = workingDirectory,
+            createdAtMillis = System.currentTimeMillis()
+        )
+        project.service<AiTurnMonitorService>().registerTab(tabContext)
+
+        scheduleTerminalStart(
+            tabName = nextTerminalTabName(OPEN_CODE_2_TAB_NAME),
+            command = launcherCommand,
+            toolName = OPEN_CODE_2_TAB_NAME,
+            tool = AiTool.OPENCODE_V2,
+            inProgress = openCode2TerminalStartInProgress,
+            projectPath = workingDirectory,
+            tabId = tabId,
+            cleanup = {
+                AiTurnOpenCodeV2Installer(project).cleanupLauncherScripts(workingDirectory, tabId)
+                AiTurnOpenCodeV2Bridge.removeTab(workingDirectory, tabId, port)
+            }
         )
     }
 
@@ -477,7 +550,7 @@ class AiTerminalBridgeService(
     }
 
     private fun shouldSkipLegacyReworkedTerminal(toolName: String): Boolean {
-        return toolName == OPEN_CODE_TAB_NAME && ideBaselineVersion() in 251..252
+        return (toolName == OPEN_CODE_TAB_NAME || toolName == OPEN_CODE_2_TAB_NAME) && ideBaselineVersion() in 251..252
     }
 
     private fun startFrontendTerminal(tabName: String, workingDirectory: String, command: String, toolName: String, registration: AiTerminalRegistration): BridgeResult? {
@@ -845,10 +918,11 @@ class AiTerminalBridgeService(
     companion object {
         private const val NOTIFICATION_GROUP_ID = "AI Terminal Tools"
         private const val OPEN_CODE_TAB_NAME = "OpenCode"
+        private const val OPEN_CODE_2_TAB_NAME = "OpenCode 2"
         private const val CLAUDE_CODE_TAB_NAME = "Claude Code"
         private const val PI_TAB_NAME = "Pi"
         private const val CODEX_TAB_NAME = "Codex"
-        private const val NO_ACTIVE_TERMINAL_MESSAGE = "Start and activate an OpenCode, Claude Code, Pi, or Codex terminal first."
+        private const val NO_ACTIVE_TERMINAL_MESSAGE = "Start and activate an OpenCode, OpenCode 2, Claude Code, Pi, or Codex terminal first."
         private const val LINE_END_SPACE = "\u0005 "
         private const val BRACKETED_PASTE_START = "\u001B[200~"
         private const val BRACKETED_PASTE_END = "\u001B[201~"
