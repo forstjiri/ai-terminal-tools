@@ -140,7 +140,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the project structure and A
 | Item | Value |
 |------|-------|
 | Plugin ID | `io.github.forstjiri.aiterminaltool` |
-| Version | `0.5.6` |
+| Version | `0.7.1` |
 | Group | `io.github.forstjiri` |
 | Vendor | `forstjiri` |
 | License | MIT |

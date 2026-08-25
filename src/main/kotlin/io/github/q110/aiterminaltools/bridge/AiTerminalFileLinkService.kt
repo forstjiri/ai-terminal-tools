@@ -4,6 +4,7 @@ package io.github.q110.aiterminaltools.bridge
 import com.intellij.execution.filters.HyperlinkInfo
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
@@ -38,8 +39,10 @@ import java.awt.event.MouseEvent
 import java.util.Collections
 import java.util.IdentityHashMap
 import java.util.concurrent.Callable
+import com.intellij.util.concurrency.AppExecutorUtil
 import javax.swing.Icon
 import javax.swing.BorderFactory
+import javax.swing.JComponent
 import javax.swing.JLabel
 import javax.swing.Timer
 
@@ -50,6 +53,7 @@ class AiTerminalFileLinkService(
 
     private val log = Logger.getInstance(AiTerminalFileLinkService::class.java)
     private val managedEditors = Collections.synchronizedMap(IdentityHashMap<Editor, EditorTracker>())
+    private val managedTerminalComponents = Collections.synchronizedMap(IdentityHashMap<JComponent, TerminalComponentTracker>())
     private val overlayIcon = IconLoader.getIcon("/icons/send-selection.svg", AiTerminalFileLinkService::class.java)
 
     init {
@@ -59,33 +63,54 @@ class AiTerminalFileLinkService(
                 managedEditors.remove(event.editor)?.clearAll()
             }
         }, this)
+        // Re-register terminals that were already open when the plugin was installed or reloaded.
+        ApplicationManager.getApplication().invokeLater {
+            try {
+                FrontendTerminalHelper(project).allTerminals().forEach { setupFrontendTab(it) }
+            } catch (_: Throwable) {
+                // The frontend terminal is optional on older IDE builds.
+            }
+        }
     }
 
     fun setupWidget(widget: TerminalWidget) {
+        log.info("File-link setup requested for reworked terminal ${widget.javaClass.name}")
         scheduleMultiSetup("reworked terminal", { getReworkedEditors(widget) }, 0)
     }
 
     fun setupFrontendTab(tab: Any) {
-        scheduleMultiSetup("frontend terminal", { getFrontendEditors(tab) }, 0)
+        log.info("File-link setup requested for frontend terminal ${tab.javaClass.name}")
+        scheduleMultiSetup("frontend terminal", {
+            getFrontendEditors(tab)
+        }, 0, onEmpty = {
+            getFrontendComponent(tab)?.let { setupTerminalComponent(it, tab) }
+        })
     }
 
-    private fun scheduleMultiSetup(target: String, editorLookup: () -> List<Editor>, attempt: Int) {
+    private fun scheduleMultiSetup(
+        target: String,
+        editorLookup: () -> List<Editor>,
+        attempt: Int,
+        onEmpty: () -> Unit = {}
+    ) {
         if (project.isDisposed || attempt >= MAX_SETUP_ATTEMPTS) return
         log.debug("File-link setup attempt ${attempt + 1}/$MAX_SETUP_ATTEMPTS for $target")
         ApplicationManager.getApplication().invokeLater {
             if (project.isDisposed) return@invokeLater
             val editors = editorLookup()
             if (editors.isNotEmpty()) {
-                log.debug("File-link editor lookup succeeded for $target: ${editors.size} editor(s)")
+                log.info("File-link editor lookup succeeded for $target: ${editors.size} editor(s)")
                 editors.forEach { setupEditor(it) }
             } else if (attempt + 1 < MAX_SETUP_ATTEMPTS) {
+                onEmpty()
                 Timer(SETUP_RETRY_DELAY_MS) {
-                    scheduleMultiSetup(target, editorLookup, attempt + 1)
+                    scheduleMultiSetup(target, editorLookup, attempt + 1, onEmpty)
                 }.apply {
                     isRepeats = false
                     start()
                 }
             } else {
+                onEmpty()
                 log.warn("File-link setup failed for $target after $MAX_SETUP_ATTEMPTS attempts")
             }
         }
@@ -93,6 +118,7 @@ class AiTerminalFileLinkService(
 
     private fun setupEditor(editor: Editor) {
         if (editor in managedEditors) return
+        log.info("Managing terminal file-link editor ${editor.javaClass.name}")
         val tracker = EditorTracker(editor)
         managedEditors[editor] = tracker
 
@@ -105,6 +131,23 @@ class AiTerminalFileLinkService(
         tracker.scheduleRescan(this)
     }
 
+    private fun setupTerminalComponent(component: JComponent, tab: Any) {
+        if (component in managedTerminalComponents) return
+        log.info("Managing frontend terminal component ${component.javaClass.name} for ${tab.javaClass.name}")
+        val tracker = TerminalComponentTracker(component, tab)
+        managedTerminalComponents[component] = tracker
+        tracker.start()
+    }
+
+    private fun getFrontendComponent(tab: Any): JComponent? {
+        return try {
+            val view = tab.javaClass.getMethod("getView").invoke(tab) ?: return null
+            view.javaClass.getMethod("getComponent").invoke(view) as? JComponent
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     private fun rescan(editor: Editor, tracker: EditorTracker) {
         if (editor.isDisposed || project.isDisposed) return
 
@@ -114,14 +157,16 @@ class AiTerminalFileLinkService(
             return
         }
 
-        val refs = ReadAction.nonBlocking(Callable {
-            findFileReferences(editor.document.charsSequence)
-        }).executeSynchronously()
-
-        val added = tracker.update(editor, refs, project, overlayIcon)
-        if (refs.isNotEmpty()) {
-            log.debug("File-link scan: ${refs.size} references, $added overlays added")
-        }
+        val text = editor.document.charsSequence.toString()
+        ReadAction.nonBlocking(Callable { findFileReferences(text) })
+            .finishOnUiThread(ModalityState.any()) { refs ->
+                if (editor.isDisposed || project.isDisposed) return@finishOnUiThread
+                val added = tracker.update(editor, refs, project, overlayIcon)
+                if (refs.isNotEmpty()) {
+                    log.info("File-link scan: ${refs.size} references, $added overlays added")
+                }
+            }
+            .submit(AppExecutorUtil.getAppExecutorService())
     }
 
     private fun findFileReferences(text: CharSequence): List<FileRef> {
@@ -193,6 +238,33 @@ class AiTerminalFileLinkService(
     override fun dispose() {
         managedEditors.values.forEach { it.clearAll() }
         managedEditors.clear()
+        managedTerminalComponents.values.forEach { it.clearAll() }
+        managedTerminalComponents.clear()
+    }
+
+    private fun createHyperlinkInfo(ref: FileRef, project: Project): HyperlinkInfo? {
+        return if (ref.target.isDirectory) {
+            FolderReferenceHyperlinkInfo(project, ref.target)
+        } else {
+            val files = ReadAction.nonBlocking(Callable {
+                val all = FilenameIndex.getVirtualFilesByName(
+                    ref.fileName,
+                    GlobalSearchScope.projectScope(project)
+                ).filter { it.isValid && !it.isDirectory }
+                    .sortedBy { displayPath(project, it) }
+                if (ref.requestedPath != null) all.filter { pathMatches(project, it, ref.requestedPath) } else all
+            }).executeSynchronously()
+            if (files.isEmpty()) null else FileReferenceHyperlinkInfo(
+                project,
+                files,
+                ref.fileName,
+                ref.requestedPath,
+                ref.hasLineNumber,
+                ref.lineNumber,
+                ref.endLineNumber,
+                emptyMap()
+            )
+        }
     }
 
     private inner class EditorTracker(val editor: Editor) {
@@ -267,7 +339,10 @@ class AiTerminalFileLinkService(
                 editor.contentComponent.add(label)
                 overlayLabels[ref.offset] = label
                 1
-            } catch (_: Throwable) { 0 }
+            } catch (exception: Throwable) {
+                log.warn("Failed to add terminal file-link overlay at offset ${ref.offset}: ${exception.message}")
+                0
+            }
         }
 
         fun clearAll() {
@@ -276,31 +351,6 @@ class AiTerminalFileLinkService(
             editor.contentComponent.repaint()
         }
 
-        private fun createHyperlinkInfo(ref: FileRef, project: Project): HyperlinkInfo? {
-            return if (ref.target.isDirectory) {
-                FolderReferenceHyperlinkInfo(project, ref.target)
-            } else {
-                val files = ReadAction.nonBlocking(Callable {
-                    val all = FilenameIndex.getVirtualFilesByName(
-                        ref.fileName,
-                        GlobalSearchScope.projectScope(project)
-                    ).filter { it.isValid && !it.isDirectory }
-                        .sortedBy { displayPath(project, it) }
-                    if (ref.requestedPath != null) all.filter { pathMatches(project, it, ref.requestedPath) } else all
-                }).executeSynchronously()
-                if (files.isEmpty()) return null
-                FileReferenceHyperlinkInfo(
-                    project,
-                    files,
-                    ref.fileName,
-                    ref.requestedPath,
-                    ref.hasLineNumber,
-                    ref.lineNumber,
-                    ref.endLineNumber,
-                    emptyMap()
-                )
-            }
-        }
     }
 
     private class OpacityIcon(private val delegate: Icon, var opacity: Float) : Icon {
@@ -317,6 +367,129 @@ class AiTerminalFileLinkService(
                 graphicsCopy.dispose()
             }
         }
+    }
+
+    private inner class TerminalComponentTracker(
+        private val component: JComponent,
+        private val tab: Any
+    ) {
+        private val overlayLabels = mutableMapOf<Int, JLabel>()
+        private val timer = Timer(RESCAN_DEBOUNCE_MS) { rescan() }
+
+        fun start() {
+            timer.isRepeats = true
+            timer.start()
+            rescan()
+        }
+
+        private fun rescan() {
+            if (project.isDisposed || !component.isDisplayable) return
+            val settings = AiTerminalToolsSettings.getInstance().getState()
+            if (!settings.fileLinksEnabled) {
+                clearAll()
+                return
+            }
+
+            try {
+                val view = tab.javaClass.getMethod("getView").invoke(tab) ?: return
+                val models = view.javaClass.getMethod("getOutputModels").invoke(view) ?: return
+                val active = models.javaClass.getMethod("getActive").invoke(models)
+                val model = active.javaClass.getMethod("getValue").invoke(active) ?: return
+                val snapshot = model.javaClass.getMethod("takeSnapshot").invoke(model)
+                val start = snapshot.javaClass.getMethod("getStartOffset").invoke(snapshot)
+                val end = snapshot.javaClass.getMethod("getEndOffset").invoke(snapshot)
+                val getText = snapshot.javaClass.methods.firstOrNull {
+                    it.name == "getText" && it.parameterTypes.size == 2
+                } ?: return
+                val text = getText.invoke(snapshot, start, end) as? CharSequence ?: return
+                ReadAction.nonBlocking(Callable { findFileReferences(text) })
+                    .finishOnUiThread(ModalityState.any()) { refs ->
+                        if (!project.isDisposed && component.isDisplayable) update(text.toString(), refs)
+                    }
+                    .submit(AppExecutorUtil.getAppExecutorService())
+            } catch (exception: Throwable) {
+                // The frontend terminal API is still evolving; retry on the next tick.
+                if (lastErrorType != exception.javaClass.name) {
+                    lastErrorType = exception.javaClass.name
+                    log.warn("Frontend terminal output lookup failed for ${tab.javaClass.name}: ${exception.message}")
+                }
+            }
+        }
+
+        private var lastErrorType: String? = null
+
+        private fun update(text: String, refs: List<FileRef>) {
+            if (text.isNotEmpty() && (refs.isNotEmpty() || lastReferenceCount != refs.size)) {
+                log.info(
+                    "Frontend terminal scan: ${text.length} chars, ${refs.size} project file reference(s), " +
+                        "component=${component.width}x${component.height}"
+                )
+                lastReferenceCount = refs.size
+            }
+            val expectedOffsets = refs.mapTo(mutableSetOf()) { it.offset }
+            overlayLabels.entries.removeIf { (offset, label) ->
+                if (offset !in expectedOffsets) {
+                    component.remove(label)
+                    true
+                } else false
+            }
+
+            val metrics = component.getFontMetrics(component.font)
+            val charWidth = metrics.charWidth('M').coerceAtLeast(1)
+            val lineHeight = metrics.height.coerceAtLeast(1)
+            val lineCount = text.count { it == '\n' } + 1
+            val visibleLines = (component.height / lineHeight).coerceAtLeast(1)
+            val firstVisibleLine = (lineCount - visibleLines).coerceAtLeast(0)
+
+            for (ref in refs) {
+                if (ref.offset in overlayLabels) continue
+                val info = createHyperlinkInfo(ref, project) ?: continue
+                val line = text.take(ref.offset).count { it == '\n' }
+                if (line < firstVisibleLine) continue
+                val lineStart = text.lastIndexOf('\n', ref.offset - 1) + 1
+                val column = ref.offset - lineStart
+                val x = column * charWidth
+                val y = (line - firstVisibleLine) * lineHeight
+                val icon = overlayIcon
+                val overlayIcon = OpacityIcon(icon, OVERLAY_ICON_OPACITY)
+                val label = JLabel(overlayIcon).apply {
+                    border = BorderFactory.createEmptyBorder(OVERLAY_PADDING, OVERLAY_PADDING, OVERLAY_PADDING, OVERLAY_PADDING)
+                    bounds = Rectangle(
+                        x - icon.iconWidth - (OVERLAY_PADDING * 2),
+                        y - OVERLAY_PADDING,
+                        icon.iconWidth + (OVERLAY_PADDING * 2),
+                        icon.iconHeight + (OVERLAY_PADDING * 2)
+                    )
+                    cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                    toolTipText = "Open ${ref.fileName} (overlay)"
+                }
+                label.addMouseListener(object : MouseAdapter() {
+                    override fun mouseClicked(e: MouseEvent) = info.navigate(project)
+                    override fun mouseEntered(e: MouseEvent) {
+                        overlayIcon.opacity = 1.0f
+                        label.repaint()
+                    }
+                    override fun mouseExited(e: MouseEvent) {
+                        overlayIcon.opacity = OVERLAY_ICON_OPACITY
+                        label.repaint()
+                    }
+                })
+                component.add(label)
+                overlayLabels[ref.offset] = label
+            }
+            component.revalidate()
+            component.repaint()
+        }
+
+        fun clearAll() {
+            timer.stop()
+            overlayLabels.values.forEach { component.remove(it) }
+            overlayLabels.clear()
+            component.revalidate()
+            component.repaint()
+        }
+
+        private var lastReferenceCount = -1
     }
 
     // ─── Data ───
@@ -375,6 +548,29 @@ class AiTerminalFileLinkService(
                     val ed = view.javaClass.getMethod("getOutputEditor").invoke(view) as? Editor
                     if (ed != null) editors.add(ed)
                 } catch (_: Throwable) {}
+                for (fieldName in listOf("outputEditor", "alternateBufferEditor")) {
+                    try {
+                        val field = findField(view.javaClass, fieldName) ?: continue
+                        field.isAccessible = true
+                        (field.get(view) as? Editor)?.let { editor ->
+                            if (editors.none { it === editor }) editors.add(editor)
+                        }
+                    } catch (_: Throwable) {}
+                }
+                // Preview builds have moved these fields between implementation classes.
+                var current: Class<*>? = view.javaClass
+                while (current != null) {
+                    for (field in current.declaredFields) {
+                        if (!Editor::class.java.isAssignableFrom(field.type)) continue
+                        try {
+                            field.isAccessible = true
+                            (field.get(view) as? Editor)?.let { editor ->
+                                if (editors.none { it === editor }) editors.add(editor)
+                            }
+                        } catch (_: Throwable) {}
+                    }
+                    current = current.superclass
+                }
                 try {
                     val altField = view.javaClass.getDeclaredField("alternateBufferEditor")
                     altField.isAccessible = true
@@ -384,6 +580,18 @@ class AiTerminalFileLinkService(
                 } catch (_: Throwable) {}
             } catch (_: Throwable) {}
             return editors
+        }
+
+        private fun findField(type: Class<*>, name: String): java.lang.reflect.Field? {
+            var current: Class<*>? = type
+            while (current != null) {
+                try {
+                    return current.getDeclaredField(name)
+                } catch (_: NoSuchFieldException) {
+                    current = current.superclass
+                }
+            }
+            return null
         }
     }
 }
