@@ -53,6 +53,16 @@ class AiTurnScriptCommonTest {
     }
 
     @Test
+    fun `OpenCode V2 keeps a turn open while waiting for a question`() {
+        val source = Paths.get("src/main/kotlin/io/github/q110/aiterminaltools/monitor/AiTurnOpenCodeV2Installer.kt")
+            .readText()
+
+        assertTrue("V2 installer must track pending questions", "const pendingQuestions = new Set();" in source)
+        assertTrue("V2 installer must recognize question events", "type === \"question.asked\"" in source)
+        assertTrue("V2 installer must suppress idle while a question is pending", "pendingQuestions.has(id)" in source)
+    }
+
+    @Test
     fun `generated scripts are syntactically valid javascript`() {
         val base = Paths.get("src/main/kotlin/io/github/q110/aiterminaltools/monitor")
         if (!Files.isDirectory(base)) return // needs repo root

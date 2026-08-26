@@ -218,6 +218,9 @@ class AiTurnOpenCodeV2Installer(
             }
 
             const sessions = new Map();
+            // OpenCode reports a session as idle while it waits for an answer to a question.
+            // Keep that pause inside the current turn until the question is resolved.
+            const pendingQuestions = new Set();
 
             function rememberSession(id, parentID, directory) {
               if (!id || !directory) return null;
@@ -291,8 +294,10 @@ class AiTurnOpenCodeV2Installer(
                           const lifecycle = type === "session.created" || type === "session.execution.started" ||
                             type === "session.execution.succeeded" || type === "session.execution.failed" ||
                             type === "session.execution.interrupted" || type === "session.idle" || type === "session.status";
+                          const questionEvent = type === "question.asked" || type === "question.replied" ||
+                            type === "question.rejected";
                           const toolEvent = type.startsWith("session.tool.");
-                          if (seenEvents <= 100 || seenEvents % 100 === 0 || lifecycle || toolEvent) {
+                          if (seenEvents <= 100 || seenEvents % 100 === 0 || lifecycle || toolEvent || questionEvent) {
                             await debug("event#" + seenEvents + " type=" + type + " id=" + id + " dir=" + eventDirectory(raw));
                           }
                           if (!id) continue;
@@ -329,6 +334,21 @@ class AiTurnOpenCodeV2Installer(
                           }
                           if (session.parentID) {
                             if (lifecycle) await debug("ignored child lifecycle id=" + id + " parent=" + session.parentID);
+                            continue;
+                          }
+                          if (type === "question.asked") {
+                            pendingQuestions.add(id);
+                            continue;
+                          }
+                          if (type === "question.replied" || type === "question.rejected") {
+                            pendingQuestions.delete(id);
+                            continue;
+                          }
+                          if (pendingQuestions.has(id) &&
+                            (type === "session.execution.succeeded" || type === "session.execution.failed" ||
+                              type === "session.execution.interrupted" || type === "session.idle" ||
+                              type === "session.status")) {
+                            await debug("ignored " + type + " while question is pending id=" + id);
                             continue;
                           }
                           if (type === "session.execution.started") {
