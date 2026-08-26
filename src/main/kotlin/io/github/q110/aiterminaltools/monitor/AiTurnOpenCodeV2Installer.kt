@@ -40,6 +40,9 @@ class AiTurnOpenCodeV2Installer(
         val js = """
             import { readFile, appendFile, stat, writeFile } from "node:fs/promises";
 
+            ${AiTurnScriptCommon.load("common-path-helpers.js")}
+            const WRITE_TOOL_NAMES = ["edit", "write", "apply_patch", "patch"];
+
             function env(name) {
               if (typeof process !== "undefined" && process && process.env) return process.env[name] || "";
               if (typeof Bun !== "undefined" && Bun && Bun.env) return Bun.env[name] || "";
@@ -264,78 +267,7 @@ class AiTurnOpenCodeV2Installer(
               return id;
             }
 
-            const WRITE_TOOL_NAMES = ["edit", "write", "apply_patch", "patch"];
             const toolCalls = new Map();
-
-            function isWriteToolName(name) {
-              return WRITE_TOOL_NAMES.includes(String(name || ""));
-            }
-
-            function inputPathsFromText(name, text) {
-              if (typeof text !== "string" || !text) return [];
-              let parsed = null;
-              try { parsed = JSON.parse(text); } catch (_) {}
-              if (parsed && typeof parsed === "object") {
-                if (typeof parsed.patchText === "string") return extractPatchPaths(parsed.patchText);
-                return extractPaths(parsed);
-              }
-              if (name === "apply_patch" || name === "patch") return extractPatchPaths(text);
-              return [];
-            }
-
-            function unique(values) {
-              const seen = new Set();
-              return values.filter((value) => value && !seen.has(value) && (seen.add(value), true));
-            }
-
-            function extractPaths(value, result) {
-              result = result || [];
-              if (!value || typeof value !== "object") return result;
-              for (const key of Object.keys(value)) {
-                const item = value[key];
-                const lower = key.toLowerCase();
-                if (typeof item === "string" &&
-                    ["file", "path", "filepath", "file_path", "filename", "file_name"].includes(lower) &&
-                    item.length < 500 && !item.includes("\n")) {
-                  result.push(item);
-                } else if (Array.isArray(item)) {
-                  item.forEach((entry) => extractPaths(entry, result));
-                } else if (item && typeof item === "object") {
-                  extractPaths(item, result);
-                }
-              }
-              return result;
-            }
-
-            function extractPatchPaths(patchText) {
-              if (typeof patchText !== "string") return [];
-              const paths = [];
-              for (const line of patchText.split(/\r?\n/)) {
-                const match = line.match(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/) ||
-                  line.match(/^\*\*\* Move to: (.+)$/);
-                if (match) paths.push(match[1]);
-              }
-              return paths;
-            }
-
-            function toolName(event) {
-              const tool = event && event.tool;
-              return typeof tool === "string" ? tool : (tool && (tool.name || tool.id)) || "";
-            }
-
-            function writePaths(event) {
-              const input = (event && event.input) || {};
-              if (toolName(event) === "apply_patch") return unique(extractPatchPaths(input.patchText));
-              return unique(extractPaths(input));
-            }
-
-            function isWriteTool(event) {
-              return ["edit", "write", "apply_patch"].includes(toolName(event));
-            }
-
-            function hookSessionId(event) {
-              return event && (event.sessionID || event.sessionId || event.session_id) || "";
-            }
 
             export default {
               id: "ai-terminal-tools",
@@ -377,12 +309,12 @@ class AiTurnOpenCodeV2Installer(
                           if (type === "session.tool.input.ended" || type === "session.tool.called") {
                             const data = dataValue(raw);
                             const entry = toolCalls.get(data.id);
-                            if (!entry || !isWriteToolName(entry.name)) continue;
+                            if (!entry || !aittIsWriteToolName(entry.name, WRITE_TOOL_NAMES)) continue;
                             const paths = type === "session.tool.called"
-                              ? extractPaths(data.input)
-                              : inputPathsFromText(entry.name, data.text);
+                              ? aittExtractPaths(data.input)
+                              : aittInputPathsFromText(entry.name, data.text);
                             if (paths.length) {
-                              entry.paths = unique(entry.paths.concat(paths));
+                              entry.paths = aittUnique(entry.paths.concat(paths));
                               await post("before_write", { paths: entry.paths, sessionID: await rootSessionId(ctx, id) });
                             }
                             continue;
@@ -390,7 +322,7 @@ class AiTurnOpenCodeV2Installer(
                           if (type === "session.tool.success" || type === "session.tool.failed") {
                             const data = dataValue(raw);
                             const entry = toolCalls.get(data.id);
-                            if (entry && isWriteToolName(entry.name) && entry.paths.length) {
+                            if (entry && aittIsWriteToolName(entry.name, WRITE_TOOL_NAMES) && entry.paths.length) {
                               await post("file_changed", { paths: entry.paths, sessionID: await rootSessionId(ctx, id) });
                             }
                             continue;

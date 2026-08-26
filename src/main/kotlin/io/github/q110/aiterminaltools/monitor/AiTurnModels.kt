@@ -13,6 +13,26 @@ enum class AiTool {
     CODEX,
 }
 
+/** How the IDEA monitor learns which files a turn changed */
+enum class AiChangeDetectionStrategy {
+    /** The tool reports precise write events; trust them */
+    WRITE_EVENTS,
+
+    /** Precise write events are preferred; a project scan is the fallback when none arrived */
+    WRITE_EVENTS_OR_SCAN_FALLBACK,
+
+    /** The tool announces only turn completion; always diff the project against a baseline */
+    ALWAYS_SCAN,
+}
+
+/** Which change-detection strategy each tool's generated integration uses */
+val AiTool.changeDetection: AiChangeDetectionStrategy
+    get() = when (this) {
+        AiTool.OPENCODE, AiTool.CLAUDE_CODE, AiTool.PI -> AiChangeDetectionStrategy.WRITE_EVENTS
+        AiTool.OPENCODE_V2 -> AiChangeDetectionStrategy.WRITE_EVENTS_OR_SCAN_FALLBACK
+        AiTool.CODEX -> AiChangeDetectionStrategy.ALWAYS_SCAN
+    }
+
 /** Turn event type */
 enum class AiTurnEventType {
     TURN_START,

@@ -29,7 +29,6 @@ class AiTurnMonitorService(
         if (context.tool == AiTool.OPENCODE_V2) rewriteOpenCodeV2Bridge()
         if (context.tool == AiTool.CODEX) {
             startTurn(context, AiTurnEvent(context.tool, AiTurnEventType.TURN_START, context.tabId, context.token, null, emptyList(), ""))
-            turns[context.tabId]?.let { project.service<AiTurnSnapshotService>().captureGitTrackedProjectBefore(it, context.workingDirectory) }
         }
         log.info("Registered AI terminal tab: ${context.tabId} (${context.tool})")
     }
@@ -107,14 +106,8 @@ class AiTurnMonitorService(
             // Claude normally ends with Stop; finish the previous turn if a new one starts first.
             log.info("Previous turn ${existing.turnId} for tab ${tab.tabId} not finished, auto-finishing")
             turns.remove(tab.tabId, existing)
-            if (tab.tool == AiTool.OPENCODE_V2) {
-                // Prefer precise write-tool events; fall back to a full project diff only
-                // when no write event arrived during the turn.
-                if (existing.beforeSnapshots.isEmpty()) {
-                    existing.changedFiles.addAll(project.service<AiTurnSnapshotService>().changedProjectFiles(existing, existing.cwd))
-                }
-                runOnTurnEndCommand(existing)
-            }
+            collectScanDetectedChanges(existing)
+            runOnTurnEndCommand(existing)
             if (existing.changedFiles.isNotEmpty()) {
                 refreshAndShowDiff(existing)
             }
@@ -129,9 +122,7 @@ class AiTurnMonitorService(
             cwd = tab.workingDirectory,
             upstreamSessionId = event.sessionId
         )
-        if (tab.tool == AiTool.OPENCODE_V2) {
-            turns[tab.tabId]?.let { project.service<AiTurnSnapshotService>().captureProjectBefore(it, tab.workingDirectory) }
-        }
+        captureBaselineIfNeeded(turns[tab.tabId])
         log.info("Started turn $turnId for tab ${tab.tabId}, session=${event.sessionId}")
     }
 
@@ -253,13 +244,7 @@ class AiTurnMonitorService(
                 "changed files: ${turn.changedFiles.size}, failed: $failed"
         )
 
-        if (tab.tool == AiTool.CODEX) {
-            turn.changedFiles.addAll(project.service<AiTurnSnapshotService>().changedGitTrackedProjectFiles(turn, turn.cwd))
-        } else if (tab.tool == AiTool.OPENCODE_V2 && turn.beforeSnapshots.isEmpty()) {
-            // Prefer precise write-tool events; fall back to a full project diff only
-            // when no write event arrived during the turn.
-            turn.changedFiles.addAll(project.service<AiTurnSnapshotService>().changedProjectFiles(turn, turn.cwd))
-        }
+        collectScanDetectedChanges(turn)
 
         runOnTurnEndCommand(turn)
 
@@ -269,7 +254,39 @@ class AiTurnMonitorService(
 
         if (tab.tool == AiTool.CODEX && !project.isDisposed) {
             startTurn(tab, event)
-            turns[tab.tabId]?.let { project.service<AiTurnSnapshotService>().captureGitTrackedProjectBefore(it, tab.workingDirectory) }
+        }
+    }
+
+    /**
+     * Diff the project against the turn's baseline for scan-based strategies.
+     * WRITE_EVENTS_OR_SCAN_FALLBACK scans only when no write event arrived,
+     * so unrelated edits made while the turn ran are not reported.
+     */
+    private fun collectScanDetectedChanges(turn: AiTurnState) {
+        val snapshotService = project.service<AiTurnSnapshotService>()
+        when (turn.tool.changeDetection) {
+            AiChangeDetectionStrategy.ALWAYS_SCAN ->
+                turn.changedFiles.addAll(snapshotService.changedGitTrackedProjectFiles(turn, turn.cwd))
+            AiChangeDetectionStrategy.WRITE_EVENTS_OR_SCAN_FALLBACK ->
+                if (turn.beforeSnapshots.all { it.value == FileSnapshot.Missing } &&
+                    turn.beforeSnapshots.none { it.key in turn.changedFiles }
+                ) {
+                    // No write-tool snapshot was captured; diff the whole project.
+                    turn.changedFiles.addAll(snapshotService.changedProjectFiles(turn, turn.cwd))
+                }
+            AiChangeDetectionStrategy.WRITE_EVENTS -> Unit
+        }
+    }
+
+    /** Capture a project baseline for strategies that may fall back to a scan. */
+    private fun captureBaselineIfNeeded(turn: AiTurnState?) {
+        if (turn == null) return
+        when (turn.tool.changeDetection) {
+            AiChangeDetectionStrategy.ALWAYS_SCAN ->
+                project.service<AiTurnSnapshotService>().captureGitTrackedProjectBefore(turn, turn.cwd)
+            AiChangeDetectionStrategy.WRITE_EVENTS_OR_SCAN_FALLBACK ->
+                project.service<AiTurnSnapshotService>().captureProjectBefore(turn, turn.cwd)
+            AiChangeDetectionStrategy.WRITE_EVENTS -> Unit
         }
     }
 
