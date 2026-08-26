@@ -37,6 +37,7 @@ import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.util.Collections
 import java.util.IdentityHashMap
+import java.util.concurrent.Callable
 import javax.swing.Icon
 import javax.swing.BorderFactory
 import javax.swing.JLabel
@@ -113,9 +114,9 @@ class AiTerminalFileLinkService(
             return
         }
 
-        val refs = ReadAction.compute<List<FileRef>, Throwable> {
+        val refs = ReadAction.nonBlocking(Callable {
             findFileReferences(editor.document.charsSequence)
-        }
+        }).executeSynchronously()
 
         val added = tracker.update(editor, refs, project, overlayIcon)
         if (refs.isNotEmpty()) {
@@ -129,9 +130,9 @@ class AiTerminalFileLinkService(
 
         for (match in FilterPatterns.atPathRefPattern.findAll(text)) {
             val reference = normalizePath(match.groupValues[1])
-            val target = ReadAction.compute<VirtualFile?, Throwable> {
+            val target = ReadAction.nonBlocking(Callable {
                 findProjectPath(project, reference)
-            } ?: continue
+            }).executeSynchronously() ?: continue
 
             val hasLineNumber = match.groupValues[2].isNotEmpty()
             val lineNumber = match.groupValues[2].toIntOrNull() ?: 1
@@ -161,14 +162,14 @@ class AiTerminalFileLinkService(
             val lineNumber = match.groupValues[2].toIntOrNull() ?: 1
             val endLineNumber = match.groupValues[3].toIntOrNull()
 
-            val files = ReadAction.compute<List<VirtualFile>, Throwable> {
+            val files = ReadAction.nonBlocking(Callable {
                 FilenameIndex.getVirtualFilesByName(fileName, GlobalSearchScope.projectScope(project))
                     .filter { it.isValid && !it.isDirectory }
                     .sortedBy { displayPath(project, it) }
                     .let { all ->
                         if (requestedPath == null) all else all.filter { pathMatches(project, it, requestedPath) }
                     }
-            }
+            }).executeSynchronously()
             if (files.isEmpty()) continue
 
             claimedRanges += match.range
@@ -279,14 +280,14 @@ class AiTerminalFileLinkService(
             return if (ref.target.isDirectory) {
                 FolderReferenceHyperlinkInfo(project, ref.target)
             } else {
-                val files = ReadAction.compute<List<VirtualFile>, Throwable> {
+                val files = ReadAction.nonBlocking(Callable {
                     val all = FilenameIndex.getVirtualFilesByName(
                         ref.fileName,
                         GlobalSearchScope.projectScope(project)
                     ).filter { it.isValid && !it.isDirectory }
                         .sortedBy { displayPath(project, it) }
                     if (ref.requestedPath != null) all.filter { pathMatches(project, it, ref.requestedPath) } else all
-                }
+                }).executeSynchronously()
                 if (files.isEmpty()) return null
                 FileReferenceHyperlinkInfo(
                     project,

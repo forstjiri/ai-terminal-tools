@@ -12,6 +12,7 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.vcs.FilePath
@@ -88,6 +89,19 @@ class GenerateCommitMessageAction : AnAction(AllIcons.Debugger.Console) {
         private val aiTool: String,
         private val toolName: String
     ) : Task.Backgroundable(project, "Generating $toolName Commit Message", false) {
+        private val workflowUiLifetime = object : Disposable {
+            @Volatile
+            var disposed = false
+
+            override fun dispose() {
+                disposed = true
+            }
+        }
+
+        init {
+            Disposer.register(workflowUi, workflowUiLifetime)
+        }
+
         override fun run(indicator: ProgressIndicator) {
             try {
                 indicator.text = "Collecting selected changes"
@@ -129,7 +143,7 @@ class GenerateCommitMessageAction : AnAction(AllIcons.Debugger.Console) {
         private fun invokeOnEdt(action: () -> Unit) {
             ApplicationManager.getApplication().invokeLater(
                 {
-                    if (!project.isDisposed && !Disposer.isDisposed(workflowUi)) {
+                    if (!project.isDisposed && !workflowUiLifetime.disposed) {
                         action()
                     }
                 },
