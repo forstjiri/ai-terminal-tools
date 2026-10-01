@@ -48,6 +48,7 @@ src/main/java/com/example/ExampleController.java:22
 C:\Projects\demo\src\main\java\com\example\ExampleController.java:22
 /projects/demo/src/main/java/com/example/ExampleController.java:22
 @src/main/java/com/example/ExampleController.java:10
+~/.opencode/plan/FOR-2528-os-minimal.md
 ```
 
 Resolution rules:
@@ -140,7 +141,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the project structure and A
 | Item | Value |
 |------|-------|
 | Plugin ID | `io.github.forstjiri.aiterminaltool` |
-| Version | `0.7.1` |
+| Version | `0.7.2` |
 | Group | `io.github.forstjiri` |
 | Vendor | `forstjiri` |
 | License | MIT |

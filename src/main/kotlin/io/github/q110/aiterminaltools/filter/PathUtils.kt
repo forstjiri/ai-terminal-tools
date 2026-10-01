@@ -6,6 +6,7 @@ import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
+import java.nio.file.Path
 
 /** Convert a VirtualFile to a project-relative display path (project base → content root → absolute path) */
 internal fun displayPath(project: Project, file: VirtualFile): String {
@@ -36,9 +37,18 @@ internal fun pathMatches(project: Project, file: VirtualFile, path: String): Boo
         normalizePath(file.path).endsWith(normalizedPath)
 }
 
-/** Find the VirtualFile for a string path in the project (project root → content roots) */
+/** Find the VirtualFile for a string path, including existing files outside the project. */
 internal fun findProjectPath(project: Project, path: String): VirtualFile? {
-    val normalizedPath = normalizePath(path).trimStart('/')
+    val normalizedPath = normalizePath(path)
+    if (Path.of(normalizedPath).isAbsolute) {
+        val localFileSystem = LocalFileSystem.getInstance()
+        val nioPath = Path.of(normalizedPath)
+        return (localFileSystem.findFileByNioFile(nioPath)
+            ?: localFileSystem.refreshAndFindFileByNioFile(nioPath))
+            ?.takeIf { it.isValid }
+    }
+
+    val projectRelativePath = normalizedPath.trimStart('/')
     val roots = mutableListOf<VirtualFile>()
     val basePath = project.basePath
     if (basePath != null) {
@@ -48,8 +58,8 @@ internal fun findProjectPath(project: Project, path: String): VirtualFile? {
 
     return roots.asSequence()
         .distinctBy { it.path }
-        .mapNotNull { it.findFileByRelativePath(normalizedPath) }
-        .firstOrNull()
+        .mapNotNull { it.findFileByRelativePath(projectRelativePath) }
+        .firstOrNull { it.isValid }
 }
 
 /** Check whether a reference string contains a path separator */
@@ -57,7 +67,15 @@ internal fun isPathReference(reference: String): Boolean {
     return reference.contains('/')
 }
 
-/** Normalize paths: unify slashes and remove whitespace and trailing punctuation */
+/** Normalize paths: unify slashes, expand a leading home shorthand, and remove trailing punctuation. */
 internal fun normalizePath(path: String): String {
-    return path.replace('\\', '/').trim().trimEnd('.', ',', ';', ':', ')', ']', '}')
+    val normalized = path.replace('\\', '/').trim().trimEnd('.', ',', ';', ':', ')', ']', '}')
+    val home = System.getProperty("user.home")?.replace('\\', '/')?.trimEnd('/')
+        ?: return normalized
+
+    return when {
+        normalized == "~" -> home
+        normalized.startsWith("~/") -> home + normalized.removePrefix("~")
+        else -> normalized
+    }
 }

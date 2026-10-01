@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.github.forstjiri"
-version = "0.7.1"
+version = "0.7.2"
 
 kotlin {
     jvmToolchain(25)
@@ -88,7 +88,8 @@ intellijPlatform {
             </ul>
         """.trimIndent()
         changeNotes = """
-            Forked plugin and added new functionality
+            Enable click-through for files outside project context.
+            Fix OpenCode 2 commit-message command mode.
         """.trimIndent()
 
         ideaVersion {

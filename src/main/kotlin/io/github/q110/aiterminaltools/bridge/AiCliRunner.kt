@@ -293,13 +293,12 @@ internal object AiCliRunner {
         showTerminal: Boolean = true,
         commandName: String = opencodeCommand(),
         configuredModel: String? = null,
-        toolLabel: String = "OpenCode"
+        toolLabel: String = "OpenCode",
+        usePureMode: Boolean = true
     ): String {
         val settings = AiTerminalToolsSettings.getInstance().getState()
         val model = (configuredModel ?: settings.commitMessageModel).trim()
-        val command = mutableListOf(commandName, "run", "--pure")
-        if (model.isNotEmpty()) command += listOf("-m", model)
-        command += listOf("--agent", "build", prompt)
+        val command = opencodeRunCommand(commandName, prompt, usePureMode, model)
 
         if (!showTerminal) {
             val result = runProcess(command, basePath, OPENCODE_TIMEOUT_SECONDS)
@@ -364,6 +363,21 @@ internal object AiCliRunner {
         }
     }
 
+    internal fun opencodeRunCommand(
+        commandName: String,
+        prompt: String,
+        usePureMode: Boolean,
+        model: String = ""
+    ): List<String> {
+        return buildList {
+            add(commandName)
+            add("run")
+            if (usePureMode) add("--pure")
+            if (model.isNotEmpty()) addAll(listOf("-m", model))
+            addAll(listOf("--agent", "build", prompt))
+        }
+    }
+
     fun runOpencode2Query(
         prompt: String,
         basePath: Path,
@@ -379,7 +393,8 @@ internal object AiCliRunner {
             showTerminal = showTerminal,
             commandName = opencode2Command(),
             configuredModel = AiTerminalToolsSettings.getInstance().getState().openCode2CommitMessageModel,
-            toolLabel = "OpenCode 2"
+            toolLabel = "OpenCode 2",
+            usePureMode = false
         )
     }
 

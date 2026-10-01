@@ -17,6 +17,7 @@ import com.intellij.openapi.editor.event.EditorFactoryListener
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.IconLoader
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.terminal.ui.TerminalWidget
@@ -178,6 +179,7 @@ class AiTerminalFileLinkService(
             val target = ReadAction.nonBlocking(Callable {
                 findProjectPath(project, reference)
             }).executeSynchronously() ?: continue
+            if (target.isDirectory && !ProjectFileIndex.getInstance(project).isInProject(target)) continue
 
             val hasLineNumber = match.groupValues[2].isNotEmpty()
             val lineNumber = match.groupValues[2].toIntOrNull() ?: 1
@@ -208,12 +210,7 @@ class AiTerminalFileLinkService(
             val endLineNumber = match.groupValues[3].toIntOrNull()
 
             val files = ReadAction.nonBlocking(Callable {
-                FilenameIndex.getVirtualFilesByName(fileName, GlobalSearchScope.projectScope(project))
-                    .filter { it.isValid && !it.isDirectory }
-                    .sortedBy { displayPath(project, it) }
-                    .let { all ->
-                        if (requestedPath == null) all else all.filter { pathMatches(project, it, requestedPath) }
-                    }
+                findFileCandidates(fileName, requestedPath)
             }).executeSynchronously()
             if (files.isEmpty()) continue
 
@@ -247,12 +244,7 @@ class AiTerminalFileLinkService(
             FolderReferenceHyperlinkInfo(project, ref.target)
         } else {
             val files = ReadAction.nonBlocking(Callable {
-                val all = FilenameIndex.getVirtualFilesByName(
-                    ref.fileName,
-                    GlobalSearchScope.projectScope(project)
-                ).filter { it.isValid && !it.isDirectory }
-                    .sortedBy { displayPath(project, it) }
-                if (ref.requestedPath != null) all.filter { pathMatches(project, it, ref.requestedPath) } else all
+                findFileCandidates(ref.fileName, ref.requestedPath)
             }).executeSynchronously()
             if (files.isEmpty()) null else FileReferenceHyperlinkInfo(
                 project,
@@ -265,6 +257,19 @@ class AiTerminalFileLinkService(
                 emptyMap()
             )
         }
+    }
+
+    private fun findFileCandidates(fileName: String, requestedPath: String?): List<VirtualFile> {
+        val exactPath = requestedPath?.let { findProjectPath(project, it) }
+            ?.takeIf { it.isValid && !it.isDirectory }
+        if (exactPath != null) return listOf(exactPath)
+
+        return FilenameIndex.getVirtualFilesByName(fileName, GlobalSearchScope.projectScope(project))
+            .filter { it.isValid && !it.isDirectory }
+            .sortedBy { displayPath(project, it) }
+            .let { all ->
+                if (requestedPath == null) all else all.filter { pathMatches(project, it, requestedPath) }
+            }
     }
 
     private inner class EditorTracker(val editor: Editor) {
