@@ -39,6 +39,7 @@ import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.util.Collections
 import java.util.IdentityHashMap
+import java.util.WeakHashMap
 import java.util.concurrent.Callable
 import com.intellij.util.concurrency.AppExecutorUtil
 import javax.swing.Icon
@@ -55,6 +56,7 @@ class AiTerminalFileLinkService(
     private val log = Logger.getInstance(AiTerminalFileLinkService::class.java)
     private val managedEditors = Collections.synchronizedMap(IdentityHashMap<Editor, EditorTracker>())
     private val managedTerminalComponents = Collections.synchronizedMap(IdentityHashMap<JComponent, TerminalComponentTracker>())
+    private val watchedFrontendTabs = Collections.synchronizedMap(WeakHashMap<Any, Boolean>())
     private val overlayIcon = IconLoader.getIcon("/icons/send-selection.svg", AiTerminalFileLinkService::class.java)
 
     init {
@@ -81,6 +83,7 @@ class AiTerminalFileLinkService(
 
     fun setupFrontendTab(tab: Any) {
         log.info("File-link setup requested for frontend terminal ${tab.javaClass.name}")
+        watchFrontendAlternateBufferEditor(tab)
         scheduleMultiSetup("frontend terminal", {
             getFrontendEditors(tab)
         }, 0, onEmpty = {
@@ -163,7 +166,7 @@ class AiTerminalFileLinkService(
             .finishOnUiThread(ModalityState.any()) { refs ->
                 if (editor.isDisposed || project.isDisposed) return@finishOnUiThread
                 val added = tracker.update(editor, refs, project, overlayIcon)
-                if (refs.isNotEmpty()) {
+                if (added > 0) {
                     log.info("File-link scan: ${refs.size} references, $added overlays added")
                 }
             }
@@ -191,6 +194,7 @@ class AiTerminalFileLinkService(
                     reference = reference,
                     fileName = reference.substringAfterLast('/'),
                     requestedPath = reference,
+                    candidates = listOf(target),
                     hasLineNumber = hasLineNumber,
                     lineNumber = lineNumber,
                     endLineNumber = endLineNumber,
@@ -221,6 +225,7 @@ class AiTerminalFileLinkService(
                     reference = reference,
                     fileName = fileName,
                     requestedPath = requestedPath,
+                    candidates = files,
                     hasLineNumber = hasLineNumber,
                     lineNumber = lineNumber,
                     endLineNumber = endLineNumber,
@@ -243,9 +248,7 @@ class AiTerminalFileLinkService(
         return if (ref.target.isDirectory) {
             FolderReferenceHyperlinkInfo(project, ref.target)
         } else {
-            val files = ReadAction.nonBlocking(Callable {
-                findFileCandidates(ref.fileName, ref.requestedPath)
-            }).executeSynchronously()
+            val files = ref.candidates.filter { it.isValid && !it.isDirectory }
             if (files.isEmpty()) null else FileReferenceHyperlinkInfo(
                 project,
                 files,
@@ -504,6 +507,7 @@ class AiTerminalFileLinkService(
         val reference: String,
         val fileName: String,
         val requestedPath: String?,
+        val candidates: List<VirtualFile>,
         val hasLineNumber: Boolean,
         val lineNumber: Int,
         val endLineNumber: Int?,
@@ -583,6 +587,12 @@ class AiTerminalFileLinkService(
                         if (editors.none { it === alt }) editors.add(alt)
                     }
                 } catch (_: Throwable) {}
+                // 2026.3+ keeps the alternate-buffer editor behind a Deferred; unwrap it when already completed.
+                try {
+                    (findAlternateBufferDeferred(view)?.let { completedValue(it) } as? Editor)?.let { alt ->
+                        if (editors.none { it === alt }) editors.add(alt)
+                    }
+                } catch (_: Throwable) {}
             } catch (_: Throwable) {}
             return editors
         }
@@ -597,6 +607,83 @@ class AiTerminalFileLinkService(
                 }
             }
             return null
+        }
+
+        /** Reads the completed value of a Deferred without blocking; returns null when incomplete or cancelled. */
+        private fun completedValue(deferred: Any): Any? {
+            return try {
+                val isCompleted = deferred.javaClass.getMethod("isCompleted").invoke(deferred) as? Boolean ?: false
+                if (!isCompleted) return null
+                // CompletableDeferredImpl is internal to kotlinx.coroutines; make the interface method accessible.
+                val getCompleted = deferred.javaClass.methods.firstOrNull { it.name == "getCompleted" } ?: return null
+                getCompleted.isAccessible = true
+                getCompleted.invoke(deferred)
+            } catch (_: Throwable) {
+                null
+            }
+        }
+
+        /** The 2026.3 frontend terminal stores the alternate-buffer editor in a Deferred instead of a field. */
+        private fun findAlternateBufferDeferred(view: Any): Any? {
+            return try {
+                view.javaClass.getMethod("getAlternateBufferEditorDeferred").invoke(view)
+            } catch (_: NoSuchMethodException) {
+                try {
+                    findField(view.javaClass, "alternateBufferEditorDeferred")
+                        ?.also { it.isAccessible = true }
+                        ?.get(view)
+                } catch (_: Throwable) {
+                    null
+                }
+            } catch (_: Throwable) {
+                null
+            }
+        }
+    }
+
+    /** Hooks the alternate-buffer editor creation so overlays attach even after a TUI starts. */
+    private fun watchFrontendAlternateBufferEditor(tab: Any) {
+        if (watchedFrontendTabs.containsKey(tab)) return
+
+        try {
+            val view = tab.javaClass.getMethod("getView").invoke(tab) ?: return
+            val deferred = findAlternateBufferDeferred(view) ?: return
+
+            synchronized(watchedFrontendTabs) {
+                if (watchedFrontendTabs.put(tab, true) != null) return
+            }
+
+            val onEditorReady = { editor: Editor ->
+                ApplicationManager.getApplication().invokeLater({
+                    if (project.isDisposed) return@invokeLater
+                    log.info("Managing frontend alternate-buffer file-link editor ${editor.javaClass.name}")
+                    setupEditor(editor)
+                }, ModalityState.any())
+            }
+
+            // A TUI may already be running on the alternate buffer when the watcher is registered.
+            (completedValue(deferred) as? Editor)?.let {
+                onEditorReady(it)
+                return
+            }
+
+            val job = deferred as? kotlinx.coroutines.Job ?: run {
+                log.debug("Frontend alternate-buffer editor holder is not a Job for ${tab.javaClass.name}")
+                return
+            }
+            job.invokeOnCompletion { cause ->
+                if (cause != null) {
+                    if (!project.isDisposed) {
+                        log.debug("Frontend alternate-buffer editor creation was cancelled: ${cause.message}")
+                    }
+                    return@invokeOnCompletion
+                }
+                (completedValue(deferred) as? Editor)?.let(onEditorReady)
+                    ?: log.debug("Frontend alternate-buffer deferred completed without an Editor")
+            }
+        } catch (exception: Throwable) {
+            watchedFrontendTabs.remove(tab)
+            log.debug("Could not watch frontend alternate-buffer editor for ${tab.javaClass.name}: ${exception.message}")
         }
     }
 }

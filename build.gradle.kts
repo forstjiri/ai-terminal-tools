@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.github.forstjiri"
-version = "0.7.2"
+version = "0.7.3"
 
 kotlin {
     jvmToolchain(25)
@@ -88,8 +88,9 @@ intellijPlatform {
             </ul>
         """.trimIndent()
         changeNotes = """
-            Enable click-through for files outside project context.
-            Fix OpenCode 2 commit-message command mode.
+            Fix file-link overlays in the 2026.3 terminal (alternate buffer editor is now behind a Deferred).
+
+            Reuse file candidates from the scan instead of re-querying the index on the UI thread.
         """.trimIndent()
 
         ideaVersion {
