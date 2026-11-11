@@ -66,7 +66,7 @@ src/main/kotlin/io/github/q110/aiterminaltools/
 
 ## Terminal File Links
 
-`AiTerminalFileLinkService` scans reworked/frontend terminal editor documents, matches file and `@path` references with `FilterPatterns`, resolves them through `PathUtils`, and adds orange overlay-diamond markers. Clicking a marker uses the jump hyperlink handlers.
+`AiTerminalFileLinkService` scans reworked/frontend terminal editor documents and combines three reference sources: text matches from `FilterPatterns` (file paths, `@path`, Markdown links), OSC 8 hyperlinks from the frontend terminal output model, and console-style editor hyperlinks. Hyperlink references win over overlapping text matches. Paths are resolved through `PathUtils` (project index, absolute paths outside the project, and `~/.opencode/plan` fallback); clicking a marker uses the jump hyperlink handlers.
 
 ## AI Turn Diff Integration
 

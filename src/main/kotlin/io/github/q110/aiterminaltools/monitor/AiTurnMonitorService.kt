@@ -12,6 +12,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 @Service(Service.Level.PROJECT)
@@ -22,6 +23,15 @@ class AiTurnMonitorService(
 
     private val tabs = ConcurrentHashMap<String, AiTerminalTabContext>()
     private val turns = ConcurrentHashMap<String, AiTurnState>()
+
+    /**
+     * Baseline walks and end-of-turn scans read the whole project; run them off the event
+     * thread so before_write events (and therefore the AI tool's next edit) are not blocked
+     * by the walk. Single thread keeps per-tab ordering (baseline before its turn's scan).
+     */
+    private val scanExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "ai-terminal-tools-turn-scan").apply { isDaemon = true }
+    }
 
     /** Register an AI terminal started by the plugin; subsequent HTTP events must match tabId/token */
     fun registerTab(context: AiTerminalTabContext) {
@@ -39,7 +49,20 @@ class AiTurnMonitorService(
         val turn = turns.remove(tabId)
         if (turn != null && turn.changedFiles.isNotEmpty()) {
             log.info("Tab $tabId unregistered with ${turn.changedFiles.size} uncommitted changes, finishing turn")
-            refreshAndShowDiff(turn)
+            submitTurnTask {
+                refreshAndShowDiff(turn)
+            }
+        }
+    }
+
+    /** Run scan-heavy turn work on the background executor; never block the event thread. */
+    private fun submitTurnTask(task: () -> Unit) {
+        scanExecutor.execute {
+            try {
+                if (!project.isDisposed) task()
+            } catch (throwable: Throwable) {
+                log.warn("Turn task failed: ${throwable.message}")
+            }
         }
     }
 
@@ -81,6 +104,8 @@ class AiTurnMonitorService(
             return
         }
 
+        log.debug("Event ${event.type} for tab ${event.tabId}, paths=${event.paths.size}, session=${event.sessionId}")
+
         when (event.type) {
             AiTurnEventType.TURN_START -> startTurn(tab, event)
             AiTurnEventType.BEFORE_WRITE -> beforeWrite(tab, event)
@@ -106,10 +131,12 @@ class AiTurnMonitorService(
             // Claude normally ends with Stop; finish the previous turn if a new one starts first.
             log.info("Previous turn ${existing.turnId} for tab ${tab.tabId} not finished, auto-finishing")
             turns.remove(tab.tabId, existing)
-            collectScanDetectedChanges(existing)
-            runOnTurnEndCommand(existing)
-            if (existing.changedFiles.isNotEmpty()) {
-                refreshAndShowDiff(existing)
+            submitTurnTask {
+                collectScanDetectedChanges(existing)
+                runOnTurnEndCommand(existing)
+                if (existing.changedFiles.isNotEmpty()) {
+                    refreshAndShowDiff(existing)
+                }
             }
         }
 
@@ -122,17 +149,21 @@ class AiTurnMonitorService(
             cwd = tab.workingDirectory,
             upstreamSessionId = event.sessionId
         )
-        captureBaselineIfNeeded(turns[tab.tabId])
+        submitTurnTask {
+            captureBaselineIfNeeded(turns[tab.tabId])
+        }
         log.info("Started turn $turnId for tab ${tab.tabId}, session=${event.sessionId}")
     }
 
     private fun beforeWrite(tab: AiTerminalTabContext, event: AiTurnEvent) {
         val turn = turnForWriteEvent(tab, event) ?: return
+        turn.writeEventsSeen = true
         captureSnapshots(turn, event.paths)
     }
 
     private fun fileChanged(tab: AiTerminalTabContext, event: AiTurnEvent) {
         val turn = turnForWriteEvent(tab, event) ?: return
+        turn.writeEventsSeen = true
         markChangedPaths(turn, event)
     }
 
@@ -244,12 +275,12 @@ class AiTurnMonitorService(
                 "changed files: ${turn.changedFiles.size}, failed: $failed"
         )
 
-        collectScanDetectedChanges(turn)
-
-        runOnTurnEndCommand(turn)
-
-        if (turn.changedFiles.isNotEmpty()) {
-            refreshAndShowDiff(turn)
+        submitTurnTask {
+            collectScanDetectedChanges(turn)
+            runOnTurnEndCommand(turn)
+            if (turn.changedFiles.isNotEmpty()) {
+                refreshAndShowDiff(turn)
+            }
         }
 
         if (tab.tool == AiTool.CODEX && !project.isDisposed) {
@@ -268,11 +299,14 @@ class AiTurnMonitorService(
             AiChangeDetectionStrategy.ALWAYS_SCAN ->
                 turn.changedFiles.addAll(snapshotService.changedGitTrackedProjectFiles(turn, turn.cwd))
             AiChangeDetectionStrategy.WRITE_EVENTS_OR_SCAN_FALLBACK ->
-                if (turn.beforeSnapshots.all { it.value == FileSnapshot.Missing } &&
-                    turn.beforeSnapshots.none { it.key in turn.changedFiles }
-                ) {
-                    // No write-tool snapshot was captured; diff the whole project.
-                    turn.changedFiles.addAll(snapshotService.changedProjectFiles(turn, turn.cwd))
+                if (!turn.writeEventsSeen) {
+                    // No write-tool event arrived this turn; diff the whole project against the baseline.
+                    val scanned = snapshotService.changedProjectFiles(turn, turn.cwd)
+                    log.info(
+                        "Fallback scan for turn ${turn.turnId}: ${scanned.size} changed file(s) " +
+                            "(no write events received)"
+                    )
+                    turn.changedFiles.addAll(scanned)
                 }
             AiChangeDetectionStrategy.WRITE_EVENTS -> Unit
         }

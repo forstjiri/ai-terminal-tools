@@ -23,6 +23,7 @@ import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.IconLoader
 import com.intellij.openapi.util.TextRange
+import com.intellij.util.concurrency.AppExecutorUtil
 import io.github.q110.aiterminaltools.bridge.AiTerminalBridgeService
 import io.github.q110.aiterminaltools.settings.AiTerminalToolsSettings
 import java.awt.Cursor
@@ -78,10 +79,14 @@ class AiConsoleErrorInlayService(
         if (project.isDisposed) return
         if (!pendingDocuments.add(document)) return
 
-        ApplicationManager.getApplication().invokeLater {
-            pendingDocuments.remove(document)
-            if (!project.isDisposed) {
-                rescan(document)
+        // Document change events fire inside write actions; hop off the dispatch thread first
+        // because invokeLater from that context is rejected as a side effect.
+        AppExecutorUtil.getAppExecutorService().execute {
+            ApplicationManager.getApplication().invokeLater {
+                pendingDocuments.remove(document)
+                if (!project.isDisposed) {
+                    rescan(document)
+                }
             }
         }
     }

@@ -67,6 +67,42 @@ internal fun isPathReference(reference: String): Boolean {
     return reference.contains('/')
 }
 
+private val nonFileUriPrefixes = listOf(
+    "http://", "https://", "mailto:", "ftp://", "ftps://", "ssh:", "tel:", "data:", "javascript:", "ws://", "wss://"
+)
+
+/**
+ * Extract a local filesystem path from an OSC 8 / markdown link destination.
+ * Accepts raw absolute paths, home shorthand, drive-letter paths, and file: URIs.
+ * Returns null for web links and unknown schemes so they keep their native handling.
+ */
+internal fun localPathFromUri(uri: String): String? {
+    val trimmed = uri.trim().trim('"', '\'', '<', '>')
+    if (trimmed.isEmpty()) return null
+
+    val lower = trimmed.lowercase()
+    if (nonFileUriPrefixes.any { lower.startsWith(it) }) return null
+
+    if (lower.startsWith("file:")) {
+        var rest = trimmed.substring("file:".length)
+        // file:///path, file://localhost/path, file:/path
+        while (rest.startsWith("//")) rest = rest.substring(2)
+        if (rest.startsWith("localhost/")) rest = rest.substring("localhost".length)
+        val decoded = try {
+            java.net.URLDecoder.decode(rest, Charsets.UTF_8)
+        } catch (_: Throwable) {
+            rest
+        }
+        return normalizePath(decoded)
+    }
+
+    val normalized = normalizePath(trimmed)
+    val looksLikeLocalPath = normalized.startsWith("/") ||
+        normalized.startsWith("~") ||
+        (normalized.length >= 2 && normalized[0].isLetter() && normalized[1] == ':')
+    return if (looksLikeLocalPath) normalized else null
+}
+
 /** Normalize paths: unify slashes, expand a leading home shorthand, and remove trailing punctuation. */
 internal fun normalizePath(path: String): String {
     val normalized = path.replace('\\', '/').trim().trimEnd('.', ',', ';', ':', ')', ']', '}')

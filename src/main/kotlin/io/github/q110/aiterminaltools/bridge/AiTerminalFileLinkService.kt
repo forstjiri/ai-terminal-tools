@@ -2,6 +2,7 @@
 package io.github.q110.aiterminaltools.bridge
 
 import com.intellij.execution.filters.HyperlinkInfo
+import com.intellij.execution.impl.EditorHyperlinkSupport
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
@@ -16,6 +17,7 @@ import com.intellij.openapi.editor.event.EditorFactoryEvent
 import com.intellij.openapi.editor.event.EditorFactoryListener
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.IconLoader
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.psi.search.FilenameIndex
@@ -25,6 +27,7 @@ import io.github.q110.aiterminaltools.filter.FilterPatterns
 import io.github.q110.aiterminaltools.filter.displayPath
 import io.github.q110.aiterminaltools.filter.findProjectPath
 import io.github.q110.aiterminaltools.filter.isPathReference
+import io.github.q110.aiterminaltools.filter.localPathFromUri
 import io.github.q110.aiterminaltools.filter.normalizePath
 import io.github.q110.aiterminaltools.filter.pathMatches
 import io.github.q110.aiterminaltools.jump.FileReferenceHyperlinkInfo
@@ -58,6 +61,18 @@ class AiTerminalFileLinkService(
     private val managedTerminalComponents = Collections.synchronizedMap(IdentityHashMap<JComponent, TerminalComponentTracker>())
     private val watchedFrontendTabs = Collections.synchronizedMap(WeakHashMap<Any, Boolean>())
     private val overlayIcon = IconLoader.getIcon("/icons/send-selection.svg", AiTerminalFileLinkService::class.java)
+    private val osc8LoggedMessages = java.util.Collections.synchronizedSet(LinkedHashSet<String>())
+
+    /**
+     * Each distinct OSC 8 outcome is logged once at INFO (deduplicated by message),
+     * so recurring rescans do not spam the log but new situations still surface.
+     */
+    private fun logOsc8Diagnostic(message: String) {
+        if (osc8LoggedMessages.size > 32) osc8LoggedMessages.clear()
+        if (osc8LoggedMessages.add(message)) {
+            log.info("OSC8 file links: $message")
+        }
+    }
 
     init {
         val editorFactory = com.intellij.openapi.editor.EditorFactory.getInstance()
@@ -86,7 +101,7 @@ class AiTerminalFileLinkService(
         watchFrontendAlternateBufferEditor(tab)
         scheduleMultiSetup("frontend terminal", {
             getFrontendEditors(tab)
-        }, 0, onEmpty = {
+        }, 0, frontendTab = tab, onEmpty = {
             getFrontendComponent(tab)?.let { setupTerminalComponent(it, tab) }
         })
     }
@@ -95,6 +110,7 @@ class AiTerminalFileLinkService(
         target: String,
         editorLookup: () -> List<Editor>,
         attempt: Int,
+        frontendTab: Any? = null,
         onEmpty: () -> Unit = {}
     ) {
         if (project.isDisposed || attempt >= MAX_SETUP_ATTEMPTS) return
@@ -104,7 +120,7 @@ class AiTerminalFileLinkService(
             val editors = editorLookup()
             if (editors.isNotEmpty()) {
                 log.info("File-link editor lookup succeeded for $target: ${editors.size} editor(s)")
-                editors.forEach { setupEditor(it) }
+                editors.forEach { setupEditor(it, frontendTab) }
             } else if (attempt + 1 < MAX_SETUP_ATTEMPTS) {
                 onEmpty()
                 Timer(SETUP_RETRY_DELAY_MS) {
@@ -120,10 +136,11 @@ class AiTerminalFileLinkService(
         }
     }
 
-    private fun setupEditor(editor: Editor) {
+    private fun setupEditor(editor: Editor, frontendTab: Any? = null) {
         if (editor in managedEditors) return
         log.info("Managing terminal file-link editor ${editor.javaClass.name}")
-        val tracker = EditorTracker(editor)
+        val modelProvider = frontendTab?.let { tab -> { activeOutputModelsSet(tab) } }
+        val tracker = EditorTracker(editor, modelProvider)
         managedEditors[editor] = tracker
 
         editor.document.addDocumentListener(object : DocumentListener {
@@ -162,7 +179,7 @@ class AiTerminalFileLinkService(
         }
 
         val text = editor.document.charsSequence.toString()
-        ReadAction.nonBlocking(Callable { findFileReferences(text) })
+        ReadAction.nonBlocking(Callable { computeReferences(editor, text, tracker) })
             .finishOnUiThread(ModalityState.any()) { refs ->
                 if (editor.isDisposed || project.isDisposed) return@finishOnUiThread
                 val added = tracker.update(editor, refs, project, overlayIcon)
@@ -173,15 +190,56 @@ class AiTerminalFileLinkService(
             .submit(AppExecutorUtil.getAppExecutorService())
     }
 
+    /** Combine text-based, OSC 8 hyperlink, and console hyperlink references; hyperlinks win over text overlaps */
+    private fun computeReferences(editor: Editor, text: CharSequence, tracker: EditorTracker): List<FileRef> {
+        val osc8Refs = findOsc8References(editor, tracker.modelProvider)
+        val consoleRefs = findConsoleHyperlinkReferences(editor).filter { ref ->
+            osc8Refs.none { osc -> ref.offset < osc.linkEndOffset && osc.offset < ref.linkEndOffset }
+        }
+        val textRefs = findFileReferences(text).filter { ref ->
+            val overlapping = osc8Refs.any { osc -> ref.offset < osc.linkEndOffset && osc.offset < ref.linkEndOffset } ||
+                consoleRefs.any { con -> ref.offset < con.linkEndOffset && con.offset < ref.linkEndOffset }
+            !overlapping
+        }
+        return textRefs + osc8Refs + consoleRefs
+    }
+
+    /** Resolve a path from within an already running non-blocking read action */
+    private fun resolvePathSync(path: String): VirtualFile? {
+        return ReadAction.nonBlocking(Callable {
+            findProjectPath(project, path)
+        }).executeSynchronously()
+    }
+
     private fun findFileReferences(text: CharSequence): List<FileRef> {
         val refs = mutableListOf<FileRef>()
         val claimedRanges = mutableListOf<IntRange>()
 
+        for (match in FilterPatterns.markdownLinkPattern.findAll(text)) {
+            val destination = localPathFromUri(match.groupValues[2]) ?: continue
+            val target = resolvePathSync(destination) ?: continue
+
+            val destinationRange = match.groups[2]!!.range
+            claimedRanges += match.range
+            refs.add(
+                FileRef(
+                    offset = destinationRange.first,
+                    reference = destination,
+                    fileName = destination.substringAfterLast('/'),
+                    requestedPath = destination,
+                    candidates = listOf(target),
+                    hasLineNumber = false,
+                    lineNumber = 1,
+                    endLineNumber = null,
+                    target = target,
+                    linkEndOffset = destinationRange.last + 1
+                )
+            )
+        }
+
         for (match in FilterPatterns.atPathRefPattern.findAll(text)) {
             val reference = normalizePath(match.groupValues[1])
-            val target = ReadAction.nonBlocking(Callable {
-                findProjectPath(project, reference)
-            }).executeSynchronously() ?: continue
+            val target = resolvePathSync(reference) ?: continue
             if (target.isDirectory && !ProjectFileIndex.getInstance(project).isInProject(target)) continue
 
             val hasLineNumber = match.groupValues[2].isNotEmpty()
@@ -198,7 +256,8 @@ class AiTerminalFileLinkService(
                     hasLineNumber = hasLineNumber,
                     lineNumber = lineNumber,
                     endLineNumber = endLineNumber,
-                    target = target
+                    target = target,
+                    linkEndOffset = match.range.last + 1
                 )
             )
         }
@@ -229,12 +288,348 @@ class AiTerminalFileLinkService(
                     hasLineNumber = hasLineNumber,
                     lineNumber = lineNumber,
                     endLineNumber = endLineNumber,
-                    target = files.first()
+                    target = files.first(),
+                    linkEndOffset = match.range.last + 1
                 )
             )
         }
 
         return refs
+    }
+
+    /**
+     * References behind OSC 8 hyperlinks of the frontend terminal output model.
+     * The visible link label conceals the destination, so it cannot be found by the text scan;
+     * the model exposes the raw link URIs instead.
+     */
+    private fun findOsc8References(editor: Editor, modelProvider: (() -> Any?)?): List<FileRef> {
+        val provider = modelProvider ?: return emptyList()
+        val modelsSet = try {
+            provider()
+        } catch (exception: Throwable) {
+            logOsc8Diagnostic("models lookup failed: ${exception.message}")
+            return emptyList()
+        } ?: return emptyList()
+
+        val models = outputModels(modelsSet)
+        if (models.isEmpty()) {
+            logOsc8Diagnostic("no output models available")
+            return emptyList()
+        }
+
+        var diagnostic: String? = null
+        for (model in models) {
+            val access = try {
+                TerminalOutputModelAccess(model)
+            } catch (exception: Throwable) {
+                diagnostic = diagnostic ?: "model API not accessible: ${exception.message}"
+                continue
+            }
+            if (access.hyperlinks.isEmpty()) {
+                if (diagnostic == null) {
+                    diagnostic = "model without OSC8 hyperlinks"
+                    log.debug("OSC8 model without hyperlinks: textLength=${access.textLength}")
+                }
+                continue
+            }
+
+            val result = osc8FileRefs(access, editor)
+            if (result.refs.isNotEmpty()) {
+                logOsc8Diagnostic(
+                    "${result.refs.size} local file(s) from ${access.hyperlinks.size} OSC8 link(s)"
+                )
+                log.debug(
+                    "OSC8 arrows: model textLength=${access.textLength}, editor=${editor.document.textLength}"
+                )
+                return result.refs
+            }
+            if (diagnostic == null) {
+                diagnostic = "links did not map to this editor" +
+                    (result.dropSummary?.let { " (dropped: $it)" } ?: "")
+                log.debug(
+                    "OSC8 mapping failed: model textLength=${access.textLength}, " +
+                        "editor=${editor.document.textLength}, links=${access.hyperlinks.size}"
+                )
+            }
+        }
+        diagnostic?.let { logOsc8Diagnostic(it) }
+        return emptyList()
+    }
+
+    /** The terminal's output models, active first, deduplicated (regular vs alternate buffer) */
+    private fun outputModels(modelsSet: Any): List<Any> {
+        val result = mutableListOf<Any>()
+        val getActive = accessibleMethod(modelsSet.javaClass, "getActive")
+        if (getActive != null) {
+            val active = try {
+                getActive.invoke(modelsSet)
+            } catch (_: Throwable) {
+                null
+            }
+            if (active != null) {
+                val getValue = accessibleMethod(active.javaClass.methods, "getValue")
+                val activeModel = try {
+                    getValue?.invoke(active)
+                } catch (_: Throwable) {
+                    null
+                }
+                if (activeModel != null) result += activeModel
+            }
+        }
+        for (name in listOf("getRegular", "getAlternative")) {
+            val model = try {
+                accessibleMethod(modelsSet.javaClass, name)?.invoke(modelsSet)
+            } catch (_: Throwable) {
+                null
+            }
+            if (model != null && result.none { it === model }) result += model
+        }
+        return result
+    }
+
+    private class Osc8ScanResult(val refs: List<FileRef>, val dropSummary: String?)
+
+    private fun osc8FileRefs(access: TerminalOutputModelAccess, editor: Editor): Osc8ScanResult {
+        val refs = mutableListOf<FileRef>()
+        val drops = linkedMapOf<String, Int>()
+        fun drop(reason: String) {
+            drops[reason] = (drops[reason] ?: 0) + 1
+        }
+
+        val firstLink = access.hyperlinks.firstOrNull()
+            ?: return Osc8ScanResult(emptyList(), null)
+        val getUri = accessibleMethod(firstLink.javaClass.methods, "getUri")
+            ?: return Osc8ScanResult(emptyList(), "missing getUri API")
+        val getStartOffset = accessibleMethod(firstLink.javaClass.methods, "getStartOffset")
+            ?: return Osc8ScanResult(emptyList(), "missing getStartOffset API")
+        val getEndOffset = accessibleMethod(firstLink.javaClass.methods, "getEndOffset")
+            ?: return Osc8ScanResult(emptyList(), "missing getEndOffset API")
+
+        for (link in access.hyperlinks) {
+            try {
+                val uri = getUri.invoke(link) as? String ?: continue
+                val path = localPathFromUri(uri)
+                if (path == null) {
+                    drop("not-local")
+                    continue
+                }
+                val target = resolvePathSync(path)
+                if (target == null) {
+                    drop("unresolved")
+                    continue
+                }
+
+                val startObject = getStartOffset.invoke(link) ?: continue
+                val endObject = getEndOffset.invoke(link) ?: continue
+                val startEditorOffset = access.editorOffset(startObject, editor.document)
+                val endEditorOffset = access.editorOffset(endObject, editor.document)
+                if (startEditorOffset == null || endEditorOffset == null) {
+                    drop("offset-mapping")
+                    continue
+                }
+
+                // Verify the mapping: the editor text at the mapped range must equal the model's link label
+                val label = access.linkText(startObject, endObject)
+                if (label != null) {
+                    val editorText = try {
+                        if (endEditorOffset > startEditorOffset && endEditorOffset <= editor.document.textLength) {
+                            editor.document.getText(
+                                com.intellij.openapi.util.TextRange(startEditorOffset, endEditorOffset)
+                            )
+                        } else {
+                            null
+                        }
+                    } catch (_: Throwable) {
+                        null
+                    }
+                    if (editorText == null || editorText != label) {
+                        drop("verify")
+                        continue
+                    }
+                } else if (Math.abs(access.textLength - editor.document.textLength) > OSC8_LENGTH_TOLERANCE) {
+                    drop("length-guard")
+                    continue
+                }
+
+                refs.add(
+                    FileRef(
+                        offset = startEditorOffset,
+                        reference = path,
+                        fileName = path.substringAfterLast('/'),
+                        requestedPath = path,
+                        candidates = listOf(target),
+                        hasLineNumber = false,
+                        lineNumber = 1,
+                        endLineNumber = null,
+                        target = target,
+                        linkEndOffset = endEditorOffset,
+                        arrowAfter = true
+                    )
+                )
+            } catch (exception: Throwable) {
+                drop("error:${exception.javaClass.simpleName}")
+                log.debug("OSC8 hyperlink processing failed: ${exception.message}")
+            }
+        }
+        return Osc8ScanResult(refs, if (drops.isEmpty()) null else drops.entries.joinToString { "${it.key}=${it.value}" })
+    }
+
+    /**
+     * References from console-style hyperlinks installed by the reworked (Gen1) terminal.
+     * Only local file destinations are converted; web links keep their native navigation.
+     */
+    private fun findConsoleHyperlinkReferences(editor: Editor): List<FileRef> {
+        val support = try {
+            EditorHyperlinkSupport.get(editor, false)
+        } catch (_: Throwable) {
+            return emptyList()
+        } ?: return emptyList()
+
+        val links = try {
+            support.hyperlinks
+        } catch (_: Throwable) {
+            return emptyList()
+        }
+
+        val refs = mutableListOf<FileRef>()
+        for ((highlighter, info) in links) {
+            try {
+                val url = hyperlinkInfoUrl(info) ?: continue
+                val path = localPathFromUri(url) ?: continue
+                val target = resolvePathSync(path) ?: continue
+
+                val start = highlighter.getStartOffset()
+                val end = highlighter.getEndOffset()
+                if (start >= end) continue
+                refs.add(
+                    FileRef(
+                        offset = start,
+                        reference = path,
+                        fileName = path.substringAfterLast('/'),
+                        requestedPath = path,
+                        candidates = listOf(target),
+                        hasLineNumber = false,
+                        lineNumber = 1,
+                        endLineNumber = null,
+                        target = target,
+                        linkEndOffset = end,
+                        arrowAfter = true
+                    )
+                )
+            } catch (exception: Throwable) {
+                log.debug("Console hyperlink processing failed: ${exception.message}")
+            }
+        }
+        return refs
+    }
+
+    /** Best-effort URL extraction from a console hyperlink info */
+    private fun hyperlinkInfoUrl(info: HyperlinkInfo): String? {
+        for (name in listOf("getUrl", "getURL")) {
+            val method = info.javaClass.methods.firstOrNull {
+                it.name == name && it.parameterCount == 0 && it.returnType == String::class.java
+            } ?: continue
+            val value = try {
+                method.invoke(info) as? String
+            } catch (_: Throwable) {
+                null
+            } ?: continue
+            if (value.isNotBlank()) return value
+        }
+        return null
+    }
+
+    /**
+     * Reflective access to the frontend terminal output model
+     * (org.jetbrains.plugins.terminal.view.TerminalOutputModel and friends).
+     */
+    private class TerminalOutputModelAccess(model: Any) {
+        val textLength: Int
+
+        /** org.jetbrains.plugins.terminal.view.TerminalOutputOsc8Hyperlink instances */
+        val hyperlinks: List<Any>
+
+        private val modelObject: Any = model
+        private val getLineByOffset: java.lang.reflect.Method?
+        private val getStartOfLine: java.lang.reflect.Method?
+        private val lineIndexOf: java.lang.reflect.Method?
+        private val toAbsolute: java.lang.reflect.Method?
+        private val getText: java.lang.reflect.Method?
+        private val offsetOf: java.lang.reflect.Method?
+
+        init {
+            val methods = modelObject.javaClass.methods
+            textLength = accessibleMethod(methods, "getTextLength")?.invoke(modelObject) as? Int ?: 0
+            val rawLinks = accessibleMethod(methods, "getOsc8Hyperlinks")
+                ?.invoke(modelObject) as? List<Any>
+            hyperlinks = rawLinks.orEmpty()
+            getLineByOffset = accessibleNamedMethod(methods, "getLineByOffset")
+            getStartOfLine = accessibleNamedMethod(methods, "getStartOfLine")
+            getText = methods.firstOrNull {
+                it.name == "getText" && it.parameterCount == 2
+            }?.apply { isAccessible = true }
+
+            val offsetType = getLineByOffset?.parameterTypes?.firstOrNull()
+            toAbsolute = offsetType?.let { accessibleMethod(it.methods, "toAbsolute") }
+            offsetOf = offsetType?.methods?.firstOrNull {
+                it.name == "of" && it.parameterCount == 1 &&
+                    (it.parameterTypes[0] == java.lang.Long.TYPE || it.parameterTypes[0] == java.lang.Long::class.java)
+            }?.apply { isAccessible = true }
+            val lineType = getStartOfLine?.parameterTypes?.firstOrNull()
+            lineIndexOf = lineType?.let { accessibleMethod(it.methods, "of") }
+        }
+
+        /** The visible label text of a link, read from the model; null when unavailable */
+        fun linkText(start: Any, end: Any): String? {
+            val method = getText ?: return null
+            val makeOffset = offsetOf ?: return null
+            val toAbs = toAbsolute ?: return null
+            return try {
+                val startAbs = toAbs.invoke(start) as? Long ?: return null
+                val endAbs = toAbs.invoke(end) as? Long ?: return null
+                val text = method.invoke(modelObject, makeOffset.invoke(null, startAbs), makeOffset.invoke(null, endAbs))
+                (text as? CharSequence)?.toString()
+            } catch (_: Throwable) {
+                null
+            }
+        }
+
+        /** Model absolute offset -> editor document offset via line/column mapping */
+        fun editorOffset(offset: Any, document: com.intellij.openapi.editor.Document): Int? {
+            val toAbs = toAbsolute ?: return null
+            val absolute = toAbs.invoke(offset) as? Long ?: return null
+            val getLine = getLineByOffset ?: return null
+            val lineObject = getLine.invoke(modelObject, offset) ?: return null
+            val line = lineObject.javaClass.methods.firstOrNull { it.name == "toAbsolute" }
+                ?.apply { isAccessible = true }
+                ?.invoke(lineObject) as? Long ?: return null
+            val lineInt = line.toInt()
+            if (lineInt < 0 || lineInt >= document.lineCount) return null
+            val getStart = getStartOfLine ?: return null
+            val makeLineIndex = lineIndexOf ?: return null
+            val lineStartObject = getStart.invoke(modelObject, makeLineIndex.invoke(null, line)) ?: return null
+            val lineStart = lineStartObject.javaClass.methods.firstOrNull { it.name == "toAbsolute" }
+                ?.apply { isAccessible = true }
+                ?.invoke(lineStartObject) as? Long ?: return null
+            val column = (absolute - lineStart).toInt()
+            val lineEnd = document.getLineEndOffset(lineInt)
+            val lineStartDoc = document.getLineStartOffset(lineInt)
+            return (lineStartDoc + column).coerceAtMost(lineEnd)
+        }
+    }
+
+    /** Resolve the output models set of a frontend terminal tab (regular + alternate buffer) */
+    private fun activeOutputModelsSet(tab: Any): Any? {
+        val view = accessibleMethod(tab.javaClass, "getView")?.invoke(tab) ?: return null
+        return accessibleMethod(view.javaClass, "getOutputModels")?.invoke(view)
+    }
+
+    /** Resolve the active output model of a frontend terminal tab (regular or alternate buffer) */
+    private fun activeOutputModel(tab: Any): Any? {
+        val modelsSet = activeOutputModelsSet(tab) ?: return null
+        val active = accessibleMethod(modelsSet.javaClass, "getActive")?.invoke(modelsSet) ?: return null
+        val getValue = accessibleMethod(active.javaClass.methods, "getValue") ?: return null
+        return getValue.invoke(active)
     }
 
     override fun dispose() {
@@ -267,15 +662,36 @@ class AiTerminalFileLinkService(
             ?.takeIf { it.isValid && !it.isDirectory }
         if (exactPath != null) return listOf(exactPath)
 
-        return FilenameIndex.getVirtualFilesByName(fileName, GlobalSearchScope.projectScope(project))
+        val projectFiles = FilenameIndex.getVirtualFilesByName(fileName, GlobalSearchScope.projectScope(project))
             .filter { it.isValid && !it.isDirectory }
             .sortedBy { displayPath(project, it) }
             .let { all ->
                 if (requestedPath == null) all else all.filter { pathMatches(project, it, requestedPath) }
             }
+        if (projectFiles.isNotEmpty()) return projectFiles
+
+        // AI CLI plans live outside the project (e.g. ~/.opencode/plan); match bare file names there
+        openCodePlanFileCandidate(fileName)?.let { return listOf(it) }
+        return emptyList()
     }
 
-    private inner class EditorTracker(val editor: Editor) {
+    private fun openCodePlanFileCandidate(fileName: String): VirtualFile? {
+        return try {
+            val file = java.nio.file.Path.of(System.getProperty("user.home"), ".opencode", "plan", fileName)
+            if (!java.nio.file.Files.isRegularFile(file)) return null
+            val localFileSystem = LocalFileSystem.getInstance()
+            (localFileSystem.findFileByNioFile(file) ?: localFileSystem.refreshAndFindFileByNioFile(file))
+                ?.takeIf { it.isValid && !it.isDirectory }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private inner class EditorTracker(
+        val editor: Editor,
+        /** Resolves the frontend terminal's active output model, when known */
+        val modelProvider: (() -> Any?)? = null
+    ) {
         private val overlayLabels = mutableMapOf<Int, JLabel>()
         @Volatile
         private var rescanPending = false
@@ -316,12 +732,17 @@ class AiTerminalFileLinkService(
 
         private fun addOverlay(editor: Editor, ref: FileRef, info: HyperlinkInfo, project: Project, icon: Icon): Int {
             return try {
-                val point = editor.offsetToXY(ref.offset)
+                val point = editor.offsetToXY(if (ref.arrowAfter) ref.linkEndOffset else ref.offset)
+                val x = if (ref.arrowAfter) {
+                    point.x + editorSpaceWidth(editor) + OVERLAY_PADDING
+                } else {
+                    point.x - icon.iconWidth - (OVERLAY_PADDING * 2)
+                }
                 val overlayIcon = OpacityIcon(icon, OVERLAY_ICON_OPACITY)
                 val label = JLabel(overlayIcon).apply {
                     border = BorderFactory.createEmptyBorder(OVERLAY_PADDING, OVERLAY_PADDING, OVERLAY_PADDING, OVERLAY_PADDING)
                     bounds = Rectangle(
-                        point.x - icon.iconWidth - (OVERLAY_PADDING * 2),
+                        x,
                         point.y - OVERLAY_PADDING,
                         icon.iconWidth + (OVERLAY_PADDING * 2),
                         icon.iconHeight + (OVERLAY_PADDING * 2)
@@ -399,11 +820,10 @@ class AiTerminalFileLinkService(
             }
 
             try {
-                val view = tab.javaClass.getMethod("getView").invoke(tab) ?: return
-                val models = view.javaClass.getMethod("getOutputModels").invoke(view) ?: return
-                val active = models.javaClass.getMethod("getActive").invoke(models)
-                val model = active.javaClass.getMethod("getValue").invoke(active) ?: return
-                val snapshot = model.javaClass.getMethod("takeSnapshot").invoke(model)
+                val model = activeOutputModel(tab) ?: return
+                val snapshot = model.javaClass.methods.first { it.name == "takeSnapshot" }
+                    .apply { isAccessible = true }
+                    .invoke(model)
                 val start = snapshot.javaClass.getMethod("getStartOffset").invoke(snapshot)
                 val end = snapshot.javaClass.getMethod("getEndOffset").invoke(snapshot)
                 val getText = snapshot.javaClass.methods.firstOrNull {
@@ -511,15 +931,48 @@ class AiTerminalFileLinkService(
         val hasLineNumber: Boolean,
         val lineNumber: Int,
         val endLineNumber: Int?,
-        val target: VirtualFile
+        val target: VirtualFile,
+        /** End of the whole reference/link in document coordinates */
+        val linkEndOffset: Int = offset,
+        /** Draw the arrow after the link end instead of before its start */
+        val arrowAfter: Boolean = false
     )
 
     companion object {
+        /** A public method by name, made accessible for implementations that are package-private at runtime */
+        private fun accessibleMethod(methods: Array<java.lang.reflect.Method>, name: String): java.lang.reflect.Method? {
+            return methods.firstOrNull { it.name == name && it.parameterCount == 0 }?.apply { isAccessible = true }
+        }
+
+        /** Same as [accessibleMethod] but also matches methods with parameters */
+        private fun accessibleNamedMethod(methods: Array<java.lang.reflect.Method>, name: String): java.lang.reflect.Method? {
+            return methods.firstOrNull { it.name == name }?.apply { isAccessible = true }
+        }
+
+        private fun accessibleMethod(type: Class<*>, name: String): java.lang.reflect.Method? {
+            return try {
+                type.getMethod(name).apply { isAccessible = true }
+            } catch (_: Throwable) {
+                null
+            }
+        }
+
         private const val SETUP_RETRY_DELAY_MS = 500
         private const val MAX_SETUP_ATTEMPTS = 21
         private const val RESCAN_DEBOUNCE_MS = 300
         private const val OVERLAY_PADDING = 4
         private const val OVERLAY_ICON_OPACITY = 0.4f
+        private const val OSC8_LENGTH_TOLERANCE = 2
+
+        /** Approximate advance of one terminal character cell for arrow placement */
+        private fun editorSpaceWidth(editor: Editor): Int {
+            return try {
+                val font = editor.colorsScheme.getFont(com.intellij.openapi.editor.colors.EditorFontType.PLAIN)
+                editor.contentComponent.getFontMetrics(font).charWidth('M')
+            } catch (_: Throwable) {
+                10
+            }
+        }
 
         private fun getReworkedEditors(widget: TerminalWidget): List<Editor> {
             val editors = mutableListOf<Editor>()
@@ -657,7 +1110,7 @@ class AiTerminalFileLinkService(
                 ApplicationManager.getApplication().invokeLater({
                     if (project.isDisposed) return@invokeLater
                     log.info("Managing frontend alternate-buffer file-link editor ${editor.javaClass.name}")
-                    setupEditor(editor)
+                    setupEditor(editor, tab)
                 }, ModalityState.any())
             }
 

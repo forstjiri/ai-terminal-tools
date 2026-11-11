@@ -32,6 +32,7 @@ class AiTurnDiffPresenter(
     private var pendingAfterContents: Map<Path, String> = emptyMap()
 
     fun showDiff(turn: AiTurnState) {
+        log.debug("showDiff turn=${turn.turnId} changed=${turn.changedFiles.size} snapshots=${turn.beforeSnapshots.size}")
         if (turn.changedFiles.isEmpty()) {
             return
         }
@@ -43,6 +44,10 @@ class AiTurnDiffPresenter(
             val requests = result.requests
             val afterContents = result.afterContents
             if (requests.isEmpty()) {
+                log.debug(
+                    "showDiff turn=${turn.turnId}: no diff requests built " +
+                        "(changed=${turn.changedFiles.size}, snapshots=${turn.beforeSnapshots.size})"
+                )
                 return@invokeLater
             }
 
@@ -211,6 +216,11 @@ class AiTurnDiffPresenter(
         if (skippedBinaryCount > 0) {
             notify("Skipped $skippedBinaryCount binary files.", NotificationType.INFORMATION)
         }
+
+        log.debug(
+            "buildRequests turn=${turn.turnId} changed=${turn.changedFiles.size} " +
+                "requests=${requests.size} skippedBinary=$skippedBinaryCount"
+        )
 
         return BuildResult(requests, afterContents)
     }

@@ -272,6 +272,30 @@ class AiTurnOpenCodeV2Installer(
 
             const toolCalls = new Map();
 
+            // Synchronous tool hooks guarantee before-snapshots run before the tool executes.
+            // The event stream below stays as a fallback for builds without these hooks.
+            function hookPaths(input) {
+              if (!input || typeof input !== "object") return [];
+              if (typeof input.patchText === "string") return aittExtractPatchPaths(input.patchText);
+              return aittExtractPaths(input);
+            }
+
+            function hookSessionId(event) {
+              const e = event || {};
+              const input = objectValue(e.input) || {};
+              return e.sessionID || e.sessionId || input.sessionID || input.sessionId || "";
+            }
+
+            async function postWriteEvent(type, event) {
+              if (!aittIsWriteToolName(event && event.tool, WRITE_TOOL_NAMES)) return;
+              const paths = aittUnique(hookPaths(event && event.input));
+              if (!paths.length) return;
+              const extra = { paths: paths };
+              const sid = hookSessionId(event);
+              if (sid) extra.sessionID = sid;
+              await post(type, extra);
+            }
+
             export default {
               id: "ai-terminal-tools",
               setup: async (ctx) => {
@@ -281,6 +305,19 @@ class AiTurnOpenCodeV2Installer(
                   " bridge=" + (bridgeProbe && Array.isArray(bridgeProbe.tabs) ? "tabs:" + bridgeProbe.tabs.length : "missing") +
                   " env=" + (envTarget() ? "present" : "absent")
                 );
+
+                if (ctx.tool && typeof ctx.tool.hook === "function") {
+                  try {
+                    await ctx.tool.hook("execute.before", (event) => postWriteEvent("before_write", event));
+                    await ctx.tool.hook("execute.after", (event) => {
+                      if ((event && event.status) !== "completed") return;
+                      return postWriteEvent("file_changed", event);
+                    });
+                    await debug("tool hooks registered");
+                  } catch (error) {
+                    await debug("tool hook registration failed: " + (error && error.message ? error.message : String(error)));
+                  }
+                }
 
                 if (ctx.event && typeof ctx.event.subscribe === "function") {
                   void (async () => {

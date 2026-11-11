@@ -34,7 +34,7 @@ Workflow:
 
 ### File Jump Links
 
-Terminal and console output are parsed into clickable file links that jump to the matching file and line range in the IDE.
+Terminal and console output are parsed into clickable file links that jump to the matching file and line range in the IDE. Markdown links, OSC 8 hyperlinks, and `@path` references get an orange overlay arrow; file names that only exist in `~/.opencode/plan` are resolved there as a fallback.
 
 Supported formats:
 

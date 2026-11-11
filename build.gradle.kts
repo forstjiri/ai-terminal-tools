@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.github.forstjiri"
-version = "0.7.3"
+version = "0.7.4"
 
 kotlin {
     jvmToolchain(25)
@@ -88,9 +88,9 @@ intellijPlatform {
             </ul>
         """.trimIndent()
         changeNotes = """
-            Fix file-link overlays in the 2026.3 terminal (alternate buffer editor is now behind a Deferred).
+            Add arrow overlays for Markdown and OSC 8 links to local files (e.g. OpenCode plans in ~/.opencode/plan), with file-name fallback outside the project.
 
-            Reuse file candidates from the scan instead of re-querying the index on the UI thread.
+            Fix file references followed by a sentence period, blocked turn events on the single-threaded event server, the OpenCode V2 scan fallback for turns without write events, snapshots now captured via synchronous execute.before/after tool hooks, and console error inlays rescheduled from write actions.
         """.trimIndent()
 
         ideaVersion {

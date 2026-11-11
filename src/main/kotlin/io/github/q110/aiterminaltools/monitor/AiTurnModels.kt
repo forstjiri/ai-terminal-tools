@@ -62,7 +62,9 @@ data class AiTurnState(
     val cwd: Path,
     val upstreamSessionId: String?,
     val beforeSnapshots: MutableMap<Path, FileSnapshot> = linkedMapOf(),
-    val changedFiles: LinkedHashSet<Path> = linkedSetOf()
+    val changedFiles: LinkedHashSet<Path> = linkedSetOf(),
+    /** Set when a write-tool event arrived this turn; gates the scan fallback */
+    var writeEventsSeen: Boolean = false
 )
 
 /** Snapshot taken before a file modification */
